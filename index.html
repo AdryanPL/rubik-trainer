@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Wirtualna kostka Rubika 3x3 — nauka</title>
+
+		<!-- Import map: pozwala plikom z examples/jsm/... rozwiązać "three" -->
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "./vendor/three/build/three.module.js"
+				}
+			}
+		</script>
+
+		<link rel="stylesheet" href="./styles.css" />
+	</head>
+	<body>
+		<!-- Hamburger (mobile) -->
+		<button id="menuToggle" aria-label="Menu" aria-expanded="false" aria-controls="ui">☰</button>
+		<div id="app"></div>
+
+		<!-- Panel treningu elementu (formularz pod sceną) -->
+		<div id="pieceTrainerUI" aria-hidden="true">
+			<div id="pieceTrainerFields"></div>
+			<div class="toolbar">
+				<button id="checkPieceAnswers">Sprawdź</button>
+				<button id="nextPieceTrainer">Następny element</button>
+			</div>
+		</div>
+
+		<div id="ui">
+			<h1>Nauka nazewnictwa pól - Blindfold 3x3 OldPochmann</h1>
+			<div class="row">
+				<label
+					>Tryb:
+					<select id="mode">
+						<option value="edit">Edycja literek</option>
+						<option value="quiz">Quiz (zgaduj)</option>
+					</select>
+				</label>
+				<label> <input type="checkbox" id="toggleLetters" checked /> Pokaż literki </label>
+			</div>
+			<div class="row">
+				<button id="reset">Reset literek</button>
+				<button id="export">Eksportuj JSON</button>
+				<button id="import">Importuj JSON</button>
+			</div>
+			<div class="row">
+				<button id="openEdgePieceQuiz">Trening elementów — krawędź (mini 3D)</button>
+				<button id="openCornerPieceQuiz">Trening elementów — róg (mini 3D)</button>
+			</div>
+			<div class="row">
+				<button id="openFullCube">Cała kostka 3x3</button>
+			</div>
+			<div class="hint">
+				Obracaj: LPM • Przesuwaj: PPM/WASD • Zoom: kółko<br />
+				Kliknij naklejkę: wpisz literę (puste = usuń). Litery zapisują się w przeglądarce.
+			</div>
+		</div>
+
+		<div id="toast"></div>
+
+		<!-- Modal wprowadzania litery (zastępuje natywny prompt) -->
+		<div id="letterModal" aria-hidden="true">
+			<div class="letter-modal__backdrop"></div>
+			<div class="letter-modal__content" role="dialog" aria-modal="true">
+				<h2 id="letterModalTitle">Litera dla pola</h2>
+				<input id="letterModalInput" type="text" maxlength="1" autocomplete="off" />
+				<div class="toolbar">
+					<button id="letterModalOk">OK</button>
+					<button id="letterModalCancel">Anuluj</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Usunięto: modal mini‑sceny (#pieceQuizModal) — pozostaje tylko tryb trenera na miejscu kostki -->
+
+		<!-- Główny moduł -->
+		<script type="module" src="./src/main.js"></script>
+	</body>
+</html>

@@ -1,0 +1,12 @@
+# Pliki systemowe
+.DS_Store
+Thumbs.db
+
+# VS Code ustawienia
+.vscode/
+
+# Node.js (jeśli kiedyś dodasz paczki)
+node_modules/
+
+# Build/kompilacje (na przyszłość)
+dist/
