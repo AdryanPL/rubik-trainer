@@ -480,20 +480,7 @@ const MOVE_FUN = { U:moveU, D:moveD, R:moveR, L:moveL, F:moveF, B:moveB }
 function applyMoveCubie(m){ const base=m[0], suf=m.length>1?m[1]:''; const fn=MOVE_FUN[base]; if(!fn) return; if(suf==="'"){fn();fn();fn()} else if(suf==='2'){fn();fn()} else {fn()} }
 function applyScrambleCubie(moves){ for(const m of moves) applyMoveCubie(m) }
 
-function randomScramble(n = 25) {
-  const faces = ['U','R','F','D','L','B']
-  const suff = ['', "'", '2']
-  const moves = []
-  let prevFace = ''
-  for (let i = 0; i < n; i++) {
-    let f
-    do { f = faces[Math.floor(Math.random()*faces.length)] } while (f === prevFace)
-    const s = suff[Math.floor(Math.random()*suff.length)]
-    moves.push(f+s)
-    prevFace = f
-  }
-  return moves
-}
+// (usunięto generowanie scramble)
 
 // ======= Interakcje =======
 const raycaster = new THREE.Raycaster()
@@ -665,7 +652,6 @@ toggle.addEventListener('change', updateLabelsVisibility)
 // Inicjalne odmalowanie po pełnej inicjalizacji
 resetCubie()
 repaintByState()
-updateLabelTextsByCubie()
 updateLabelColorByCubie()
 updateLabelsVisibility()
 
@@ -731,25 +717,7 @@ document.getElementById('import').addEventListener('click', () => {
 	input.click()
 })
 
-// Wymieszaj / Ułóż (bez animacji)
-const scrambleBtn = document.getElementById('scrambleCube')
-const solveBtn = document.getElementById('solveCube')
-if (scrambleBtn) scrambleBtn.addEventListener('click', () => {
-  const seq = randomScramble(25)
-  applyScrambleCubie(seq)
-  repaintByState()
-  updateLabelColorByCubie()
-  updateLabelsVisibility()
-  showToast(seq.join(' '), 2000)
-})
-if (solveBtn) solveBtn.addEventListener('click', () => {
-  resetCubie()
-  repaintByState()
-  updateLabelColorByCubie()
-  updateLabelsVisibility()
-  initTheme()
-  showToast('Ułożono (reset kolorów).', 1200)
-})
+// (usunięto obsługę przycisków Wymieszaj/Ułóż)
 
 // Resize + pętla
 function onResize() {

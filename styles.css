@@ -32,7 +32,7 @@ body {
 }
 /* Light theme overrides */
 body[data-theme='light'] {
-	background: #FAF9F9;
+	background: #faf9f9;
 }
 #app {
 	position: fixed;
@@ -96,31 +96,43 @@ body[data-theme='light'] {
 
 /* Toggle switch */
 .switch {
-  position: relative;
-  display: inline-block;
-  width: 46px;
-  height: 26px;
+	position: relative;
+	display: inline-block;
+	width: 46px;
+	height: 26px;
 }
-.switch input { display: none; }
+.switch input {
+	display: none;
+}
 .switch .slider {
-  position: absolute; inset: 0;
-  background: #374151;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background .2s ease;
+	position: absolute;
+	inset: 0;
+	background: #374151;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background 0.2s ease;
 }
 .switch .slider::before {
-  content: '';
-  position: absolute;
-  height: 20px; width: 20px;
-  left: 3px; top: 3px;
-  background: #e5e7eb;
-  border-radius: 999px;
-  transition: transform .2s ease;
+	content: '';
+	position: absolute;
+	height: 20px;
+	width: 20px;
+	left: 3px;
+	top: 3px;
+	background: #e5e7eb;
+	border-radius: 999px;
+	transition: transform 0.2s ease;
 }
-.switch input:checked + .slider { background: #2563eb; }
-.switch input:checked + .slider::before { transform: translateX(20px); }
-#themeRow { align-items: center; gap: 10px; }
+.switch input:checked + .slider {
+	background: #2563eb;
+}
+.switch input:checked + .slider::before {
+	transform: translateX(20px);
+}
+#themeRow {
+	align-items: center;
+	gap: 10px;
+}
 
 /* Mobile behavior: collapse UI into hamburger */
 @media (max-width: 640px) {
