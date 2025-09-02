@@ -559,10 +559,10 @@ function openLetterModal(stickerId, defaultValue = '') {
 		cancelBtn.addEventListener('click', onCancel)
 		modal.addEventListener('click', onBackdrop)
 		window.addEventListener('keydown', onKey)
-		// wymuś uppercase na bieżąco
-		input.addEventListener('input', () => {
-			input.value = (input.value || '').toUpperCase().slice(0, 1)
-		})
+        // wymuś uppercase na bieżąco (bez limitu długości)
+        input.addEventListener('input', () => {
+            input.value = (input.value || '').toUpperCase()
+        })
 		setTimeout(() => input.focus(), 0)
 	})
 }
@@ -610,6 +610,11 @@ async function handleClick(ev) {
         saveLabels(labels)
         updateLabelsVisibility()
     } else {
+        // W trybie quiz: zablokuj bufory i środki tak jak w edycji
+        if (tile.userData.disabled) {
+            showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
+            return
+        }
         // Sprawdź literę przypisaną do pozycji (id)
         const target = (labels[id] || '').toUpperCase()
         if (!target) {
@@ -663,6 +668,17 @@ repaintByState()
 updateLabelTextsByCubie()
 updateLabelColorByCubie()
 updateLabelsVisibility()
+
+// Tryb quiz: po przełączeniu na "quiz (zgaduj)" ukryj literki na start
+const modeSelect = document.getElementById('mode')
+if (modeSelect) {
+  modeSelect.addEventListener('change', () => {
+    if (modeSelect.value === 'quiz') {
+      toggle.checked = false
+      updateLabelsVisibility()
+    }
+  })
+}
 
 // Reset / eksport / import
 document.getElementById('reset').addEventListener('click', () => {
@@ -1015,24 +1031,24 @@ function startPieceTrainer(kind) {
     tScene.add(group)
     lastIdsKey = ids.join('+')
   }
-	function renderFields(ids) {
-		trainerFields.innerHTML = ''
-		ids.forEach((id, idx) => {
-			const face = id[0]
-			const colorHex = FACE_COLORS[face]
-			const row = document.createElement('div')
-			row.className = 'sticker-row'
-			const sw = document.createElement('span')
-			sw.className = 'sticker-swatch'
-			sw.style.background = `#${colorHex.toString(16).padStart(6, '0')}`
-			const lab = document.createElement('span')
-			lab.className = 'sticker-id'
-            lab.textContent = id
-            lab.title = id
-			const inp = document.createElement('input')
-			inp.className = 'sticker-input'
-			inp.maxLength = 1
-			inp.dataset.id = id
+  function renderFields(ids) {
+    trainerFields.innerHTML = ''
+    const FACE_NAMES = { U: 'Biały', D: 'Żółty', F: 'Zielony', B: 'Niebieski', R: 'Czerwony', L: 'Pomarańczowy' }
+    ids.forEach((id, idx) => {
+      const face = id[0]
+      const colorHex = FACE_COLORS[face]
+      const row = document.createElement('div')
+      row.className = 'sticker-row'
+      const sw = document.createElement('span')
+      sw.className = 'sticker-swatch'
+      sw.style.background = `#${colorHex.toString(16).padStart(6, '0')}`
+      const lab = document.createElement('span')
+      lab.className = 'sticker-id'
+      lab.textContent = FACE_NAMES[face] || id
+      lab.title = id // zachowaj surowe ID jako podpowiedź
+      const inp = document.createElement('input')
+      inp.className = 'sticker-input'
+      inp.dataset.id = id
 			row.appendChild(sw)
 			row.appendChild(lab)
 			row.appendChild(inp)
