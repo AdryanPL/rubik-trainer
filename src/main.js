@@ -57,6 +57,8 @@ window.addEventListener('resize', () => applyMainCameraDistance())
 // Hamburger menu (mobile): toggles #ui visibility
 const menuToggle = document.getElementById('menuToggle')
 const uiPanel = document.getElementById('ui')
+const themeToggle = document.getElementById('toggleTheme')
+const themeLabel = document.getElementById('themeLabel')
 if (menuToggle && uiPanel) {
 	menuToggle.addEventListener('click', () => {
 		const open = !uiPanel.classList.contains('open')
@@ -91,6 +93,32 @@ if (menuToggle && uiPanel) {
 		if (e.key === 'Escape') closeUi()
 	})
 }
+
+// ======= Theme switch (dark/light) =======
+const THEME_KEY = 'rubik_theme'
+function applyTheme(theme) {
+  // Body background via CSS data attribute
+  document.body.setAttribute('data-theme', theme)
+  // Three scene background + fog color
+  const bg = (theme === 'light') ? 0xFAF9F9 : 0x0b0f14
+  if (scene.background) scene.background.set ? scene.background.set(bg) : (scene.background = new THREE.Color(bg))
+  else scene.background = new THREE.Color(bg)
+  if (scene.fog) scene.fog.color.setHex(bg)
+  // Button label
+  if (themeLabel) themeLabel.textContent = `Tryb: ${theme === 'light' ? 'Jasny' : 'Ciemny'}`
+  if (themeToggle) themeToggle.checked = (theme === 'light')
+  // Persist
+  try { localStorage.setItem(THEME_KEY, theme) } catch {}
+}
+
+function initTheme() {
+  let theme = 'dark'
+  try { theme = localStorage.getItem(THEME_KEY) || 'dark' } catch {}
+  applyTheme(theme)
+}
+if (themeToggle) themeToggle.addEventListener('change', () => {
+  applyTheme(themeToggle.checked ? 'light' : 'dark')
+})
 
 // ======= Model kostki =======
 const CUBE_SIZE = 3
@@ -175,18 +203,15 @@ faces.forEach(face => {
 
             const div = document.createElement('div')
             div.className = 'label'
-			// Czarny kolor liter na białych (U) i żółtych (D) polach, aby były czytelne
-			if (face.name === 'U' || face.name === 'D') {
-				div.style.color = '#000000'
-				div.style.textShadow = 'none'
-			}
+            // Czarny kolor liter dla wszystkich pól
+            div.style.color = '#000000'
+            div.style.textShadow = 'none'
             if ((DISABLED_TILES.has(id) || isCenter) && labels[id]) {
                 delete labels[id]
                 _disabledLabelsCleared = true
             }
-            // Początkowo etykiety z mapy faceletowej (ustawione po inicjalizacji)
-            // Ustawimy rzeczywistą treść po zainicjalizowaniu faceletLabels poniżej
-            div.textContent = ''
+            // Etykieta wg pozycji (id) — nazwy pól nie przemieszczają się
+            div.textContent = labels[id] || ''
 			const label = new CSS2DObject(div)
 			label.position.set(0, 0, 0.002)
 			tile.add(label)
@@ -332,6 +357,50 @@ function repaintByState() {
   }
 }
 
+// Zwraca tablicę długości 54: dla każdego faceletu zwraca literę ściany (U/R/F/D/L/B)
+function computeFaceNameByPos() {
+  const faceNameByPos = new Array(54).fill(null)
+  // centra
+  for (let f = 0; f < 6; f++) {
+    const face = FACE_ORDER[f]
+    const base = FACE_OFFSET[face]
+    for (let i = 0; i < 9; i++) faceNameByPos[base + i] = face
+  }
+  // rogi
+  for (let i = 0; i < 8; i++) {
+    const p = cornerPerm[i]
+    const o = cornerOri[i]
+    const facelets = CORNER_FACELETS[i]
+    const colors = CORNER_COLORS[p]
+    for (let j = 0; j < 3; j++) {
+      const facelet = facelets[j]
+      const faceName = colors[(j + 3 - o) % 3]
+      faceNameByPos[facelet] = faceName
+    }
+  }
+  // krawędzie
+  for (let i = 0; i < 12; i++) {
+    const p = edgePerm[i]
+    const o = edgeOri[i]
+    const facelets = EDGE_FACELETS[i]
+    const colors = EDGE_COLORS[p]
+    for (let j = 0; j < 2; j++) {
+      const facelet = facelets[j]
+      const faceName = colors[(j + 2 - o) % 2]
+      faceNameByPos[facelet] = faceName
+    }
+  }
+  return faceNameByPos
+}
+
+function updateLabelColorByCubie() {
+  // Czarny kolor liter dla wszystkich pól
+  labelMap.forEach((lbl) => {
+    lbl.element.style.color = '#000000'
+    lbl.element.style.textShadow = 'none'
+  })
+}
+
 // ======= Litery powiązane z faceletami (podążają za elementami) =======
 let faceletLabels = Array.from({ length: 54 }, () => '')
 
@@ -382,13 +451,11 @@ function buildFaceletMappingFromCubie() {
 
 function updateLabelTextsByCubie() {
   const mapping = buildFaceletMappingFromCubie()
-  for (let pos = 0; pos < 54; pos++) {
+for (let pos = 0; pos < 54; pos++) {
     const id = posToId[pos]
     const lblObj = labelMap.get(id)
     if (!lblObj) continue
-    const orig = mapping[pos]
-    const text = orig >= 0 ? (faceletLabels[orig] || '') : ''
-    lblObj.element.textContent = text
+    lblObj.element.textContent = labels[id] || ''
   }
 }
 // Inicjalizacja: wczytaj litery z labels (id->litera) do faceletLabels,
@@ -536,24 +603,15 @@ async function handleClick(ev) {
         const val = await openLetterModal(id, current)
         if (val === null) return
         const clean = (val || '').trim().toUpperCase()
-        // Zapisz literę dla oryginalnego faceletu, który aktualnie znajduje się na klikniętej pozycji
-        const posIndex = idToPos.get(id)
-        const mapping = buildFaceletMappingFromCubie()
-        const origIndex = mapping[posIndex]
-        if (origIndex >= 0) {
-          faceletLabels[origIndex] = clean
-        }
-        // Zaktualizuj mapę labels (id->litera w stanie rozwiązanego) i zapisz
-        labels = buildLabelsObjectFromFacelets()
+        if (clean) labels[id] = clean; else delete labels[id]
+        // odśwież UI pozycyjnie
+        const lbl = labelMap.get(id)
+        if (lbl) lbl.element.textContent = clean
         saveLabels(labels)
-        updateLabelTextsByCubie()
         updateLabelsVisibility()
     } else {
-        // Sprawdź literę dla oryginalnego faceletu aktualnie na tej pozycji
-        const posIndex = idToPos.get(id)
-        const mapping = buildFaceletMappingFromCubie()
-        const origIndex = mapping[posIndex]
-        const target = origIndex >= 0 ? (faceletLabels[origIndex] || '').toUpperCase() : ''
+        // Sprawdź literę przypisaną do pozycji (id)
+        const target = (labels[id] || '').toUpperCase()
         if (!target) {
             showToast(`Dla ${id} nie ustawiono litery.`)
             return
@@ -603,15 +661,15 @@ toggle.addEventListener('change', updateLabelsVisibility)
 resetCubie()
 repaintByState()
 updateLabelTextsByCubie()
+updateLabelColorByCubie()
 updateLabelsVisibility()
 
 // Reset / eksport / import
 document.getElementById('reset').addEventListener('click', () => {
     if (!confirm('Na pewno usunąć wszystkie literki?')) return
-    faceletLabels = Array.from({ length: 54 }, () => '')
     labels = {}
     saveLabels(labels)
-    updateLabelTextsByCubie()
+    labelMap.forEach((lbl) => (lbl.element.textContent = ''))
     updateLabelsVisibility()
     showToast('Wyczyszczono.')
 })
@@ -644,13 +702,8 @@ document.getElementById('import').addEventListener('click', () => {
                     }
                 }
                 saveLabels(labels)
-                // Zbuduj faceletLabels z mapy id->litera
-                faceletLabels = Array.from({ length: 54 }, () => '')
-                for (const [id, val] of Object.entries(labels)) {
-                  const pos = idToPos.get(id)
-                  if (pos != null) faceletLabels[pos] = val
-                }
-                updateLabelTextsByCubie()
+                // Odśwież etykiety wg pozycji
+                labelMap.forEach((lbl, id) => { lbl.element.textContent = labels[id] || '' })
                 updateLabelsVisibility()
                 showToast('Zaimportowano.')
             } catch {
@@ -669,15 +722,16 @@ if (scrambleBtn) scrambleBtn.addEventListener('click', () => {
   const seq = randomScramble(25)
   applyScrambleCubie(seq)
   repaintByState()
-  updateLabelTextsByCubie()
+  updateLabelColorByCubie()
   updateLabelsVisibility()
   showToast(seq.join(' '), 2000)
 })
 if (solveBtn) solveBtn.addEventListener('click', () => {
   resetCubie()
   repaintByState()
-  updateLabelTextsByCubie()
+  updateLabelColorByCubie()
   updateLabelsVisibility()
+  initTheme()
   showToast('Ułożono (reset kolorów).', 1200)
 })
 
