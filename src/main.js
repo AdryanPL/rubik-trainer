@@ -329,6 +329,12 @@ function initOrientation() {
   refreshAllLabelTexts()
   // Ustaw checkbox wg progressu na starcie
   setLettersToggleByProgress()
+  // Ukryj checkbox w trybie edycji na starcie
+  {
+    const labelEl = toggle ? toggle.closest('label') : null
+    const modeEl = document.getElementById('mode')
+    if (labelEl) labelEl.style.display = modeEl && modeEl.value === 'quiz' ? 'inline-flex' : 'none'
+  }
 }
 
 initTheme()
@@ -1117,6 +1123,8 @@ const _toCam = new THREE.Vector3()
 
 function updateLabelsVisibility() {
 	const showLetters = toggle.checked
+    const modeEl = document.getElementById('mode')
+    const modeVal = modeEl ? modeEl.value : 'edit'
 	for (const tile of stickerMeshes) {
 		const id = tile.userData.id
 		const lbl = labelMap.get(id)
@@ -1130,18 +1138,19 @@ function updateLabelsVisibility() {
 			_toCam.copy(camera.position).sub(_tmpPos).normalize()
 			facing = _tmpDir.dot(_toCam) > 0.05
 		}
-		// Literki: widoczne zawsze, jeśli są ustawione, płytka jest widoczna i nie jest disabled
-		const show = !!(hasText && facing && !tile.userData.disabled)
+		// Literki: w edycji zawsze; w quizie ukryj, gdy checkbox zaznaczony
+		let show = !!(hasText && facing && !tile.userData.disabled)
+		if (modeVal === 'quiz' && showLetters) show = false
 		lbl.visible = show
 		lbl.element.style.display = show ? 'block' : 'none'
 	}
-	// Kropki: gdy checkbox zaznaczony – ukryj, gdy odznaczony – pokaż tylko na pustych polach
+	// Kropki: w obu trybach pokazuj na pustych; w quizie pozostają widoczne także, gdy checkbox jest zaznaczony
 	dotMap.forEach((dot, id) => {
 		const lbl = labelMap.get(id)
 		const hasText = !!(lbl && lbl.element.textContent)
 		const tile = idToTile.get(id)
 		const disabled = tile ? tile.userData.disabled : false
-		dot.visible = !showLetters && !hasText && !disabled
+		dot.visible = !hasText && !disabled
 	})
 }
 toggle.addEventListener('change', updateLabelsVisibility)
@@ -1160,6 +1169,11 @@ if (modeSelect) {
 			toggle.checked = false
 			updateLabelsVisibility()
 		}
+		// Pokaż checkbox tylko w trybie quiz; ukryj w edycji
+		const labelEl = toggle ? toggle.closest('label') : null
+		if (labelEl) labelEl.style.display = modeSelect.value === 'quiz' ? 'inline-flex' : 'none'
+		// Odśwież widoczność po zmianie trybu (dla kropek w edycji)
+		updateLabelsVisibility()
 	})
 }
 

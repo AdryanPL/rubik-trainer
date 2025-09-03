@@ -393,7 +393,7 @@ body[data-theme='light'] {
 	animation: letter-pop 200ms ease-out both;
 }
 #orientationOverlay h2 {
-	margin: 0 0 6px;
+	margin: 0 0 10px;
 	font-size: 18px;
 	color: #f3f4f6;
 	font-weight: 600;
@@ -439,6 +439,7 @@ body[data-theme='light'] {
 	display: grid;
 	grid-template-columns: repeat(6, 1fr);
 	gap: 8px;
+	margin-bottom: 16px;
 }
 .color-swatch {
 	width: 32px;
