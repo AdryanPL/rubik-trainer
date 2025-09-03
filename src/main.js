@@ -23,6 +23,10 @@ labelRenderer.domElement.style.pointerEvents = 'none'
 labelRenderer.domElement.style.zIndex = '5'
 document.body.appendChild(labelRenderer.domElement)
 
+// Grupa główna kostki (łatwa rotacja orientacji)
+const cubeGroup = new THREE.Group()
+scene.add(cubeGroup)
+
 // Światło
 scene.add(new THREE.AmbientLight(0xffffff, 0.75))
 const dir = new THREE.DirectionalLight(0xffffff, 1.0)
@@ -43,12 +47,12 @@ const MOBILE_FACTOR = 1.4
 const BASE_CAM_LEN = camera.position.length()
 let camMobileApplied = null // null = nieustalone, true = mobile zastosowane, false = desktop
 function applyMainCameraDistance(force = false) {
-  const isMobile = window.matchMedia('(max-width: 640px)').matches
-  if (!force && camMobileApplied === isMobile) return
-  const targetLen = isMobile ? BASE_CAM_LEN * MOBILE_FACTOR : BASE_CAM_LEN
-  camera.position.setLength(targetLen)
-  camera.updateProjectionMatrix()
-  camMobileApplied = isMobile
+	const isMobile = window.matchMedia('(max-width: 640px)').matches
+	if (!force && camMobileApplied === isMobile) return
+	const targetLen = isMobile ? BASE_CAM_LEN * MOBILE_FACTOR : BASE_CAM_LEN
+	camera.position.setLength(targetLen)
+	camera.updateProjectionMatrix()
+	camMobileApplied = isMobile
 }
 // Zastosuj na starcie i przy zmianie rozmiaru
 applyMainCameraDistance(true)
@@ -97,28 +101,200 @@ if (menuToggle && uiPanel) {
 // ======= Theme switch (dark/light) =======
 const THEME_KEY = 'rubik_theme'
 function applyTheme(theme) {
-  // Body background via CSS data attribute
-  document.body.setAttribute('data-theme', theme)
-  // Three scene background + fog color
-  const bg = (theme === 'light') ? 0xFAF9F9 : 0x0b0f14
-  if (scene.background) scene.background.set ? scene.background.set(bg) : (scene.background = new THREE.Color(bg))
-  else scene.background = new THREE.Color(bg)
-  if (scene.fog) scene.fog.color.setHex(bg)
-  // Button label
-  if (themeLabel) themeLabel.textContent = `Tryb: ${theme === 'light' ? 'Jasny' : 'Ciemny'}`
-  if (themeToggle) themeToggle.checked = (theme === 'light')
-  // Persist
-  try { localStorage.setItem(THEME_KEY, theme) } catch {}
+	// Body background via CSS data attribute
+	document.body.setAttribute('data-theme', theme)
+	// Three scene background + fog color
+	const bg = theme === 'light' ? 0xfaf9f9 : 0x0b0f14
+	if (scene.background) scene.background.set ? scene.background.set(bg) : (scene.background = new THREE.Color(bg))
+	else scene.background = new THREE.Color(bg)
+	if (scene.fog) scene.fog.color.setHex(bg)
+	// Button label
+	if (themeLabel) themeLabel.textContent = `Tryb: ${theme === 'light' ? 'Jasny' : 'Ciemny'}`
+	if (themeToggle) themeToggle.checked = theme === 'light'
+	// Persist
+	try {
+		localStorage.setItem(THEME_KEY, theme)
+	} catch {}
 }
 
 function initTheme() {
-  let theme = 'dark'
-  try { theme = localStorage.getItem(THEME_KEY) || 'dark' } catch {}
-  applyTheme(theme)
+	let theme = 'dark'
+	try {
+		theme = localStorage.getItem(THEME_KEY) || 'dark'
+	} catch {}
+	applyTheme(theme)
 }
-if (themeToggle) themeToggle.addEventListener('change', () => {
-  applyTheme(themeToggle.checked ? 'light' : 'dark')
-})
+if (themeToggle)
+	themeToggle.addEventListener('change', () => {
+		applyTheme(themeToggle.checked ? 'light' : 'dark')
+	})
+
+// ======= Pierwsze uruchomienie: wybór orientacji (front/top) =======
+const ORIENTATION_KEY = 'rubik_orientation_v1'
+const orientationOverlay = document.getElementById('orientationOverlay')
+const orientationStart = document.getElementById('orientationStart')
+const orientationStartBtn = document.getElementById('orientationStartBtn')
+const orientationSelection = document.getElementById('orientationSelection')
+const frontChoices = document.getElementById('frontChoices')
+const topChoices = document.getElementById('topChoices')
+const orientationSaveBtn = document.getElementById('orientationSaveBtn')
+
+const COLOR_HEX = {
+	white: 0xffffff,
+	yellow: 0xffea00,
+	green: 0x00a650,
+	blue: 0x1e90ff,
+	red: 0xcc0000,
+	orange: 0xfe7f00,
+}
+const COLOR_LABEL = {
+	white: 'Biały',
+	yellow: 'Żółty',
+	green: 'Zielony',
+	blue: 'Niebieski',
+	red: 'Czerwony',
+	orange: 'Pomarańczowy',
+}
+const OPPOSITE = { white: 'yellow', yellow: 'white', green: 'blue', blue: 'green', red: 'orange', orange: 'red' }
+
+let selectedFront = null
+let selectedTop = null
+
+function buildColorGrid(container, group) {
+	container.innerHTML = ''
+	;['white', 'yellow', 'green', 'blue', 'red', 'orange'].forEach(c => {
+		const sw = document.createElement('button')
+		sw.type = 'button'
+		sw.className = 'color-swatch'
+		sw.style.background = `#${COLOR_HEX[c].toString(16).padStart(6, '0')}`
+		sw.setAttribute('role', 'radio')
+		sw.setAttribute('aria-checked', 'false')
+		sw.dataset.color = c
+		sw.title = COLOR_LABEL[c]
+		container.appendChild(sw)
+	})
+}
+
+function updateTopDisabling() {
+	const swatches = topChoices ? Array.from(topChoices.querySelectorAll('.color-swatch')) : []
+	for (const sw of swatches) {
+		const c = sw.dataset.color
+		const dis = !!selectedFront && (c === selectedFront || c === OPPOSITE[selectedFront])
+		sw.setAttribute('aria-disabled', dis ? 'true' : 'false')
+	}
+	// jeśli aktualnie wybrana góra stała się nielegalna, usuń wybór
+	if (selectedFront && selectedTop && (selectedTop === selectedFront || selectedTop === OPPOSITE[selectedFront])) {
+		// clear selection
+		const prev = topChoices.querySelector(`.color-swatch[aria-checked='true']`)
+		if (prev) prev.setAttribute('aria-checked', 'false')
+		selectedTop = null
+	}
+}
+
+function updateSaveEnabled() {
+	const ok = !!selectedFront && !!selectedTop
+	if (orientationSaveBtn) orientationSaveBtn.disabled = !ok
+}
+
+function selectSwatch(container, sw) {
+	const prev = container.querySelector(".color-swatch[aria-checked='true']")
+	if (prev) prev.setAttribute('aria-checked', 'false')
+	sw.setAttribute('aria-checked', 'true')
+}
+
+function openOrientationOverlay() {
+	if (!orientationOverlay) return
+	// Hide main UI while overlay is open
+	if (uiPanel) uiPanel.style.display = 'none'
+	orientationOverlay.classList.add('open')
+	orientationOverlay.setAttribute('aria-hidden', 'false')
+}
+function closeOrientationOverlay() {
+	if (!orientationOverlay) return
+	orientationOverlay.classList.remove('open')
+	orientationOverlay.setAttribute('aria-hidden', 'true')
+	// Restore main UI
+	if (uiPanel) uiPanel.style.display = ''
+}
+
+function resetOrientationWizardState() {
+	// Przywróć krok Start i wyczyść wybory
+	selectedFront = null
+	selectedTop = null
+	if (orientationStart) orientationStart.style.display = '' // wróć do CSS (grid)
+	if (orientationSelection)
+		orientationSelection.hidden = true
+		// wyczyść zaznaczenia
+	;[frontChoices, topChoices].forEach(container => {
+		if (!container) return
+		container.querySelectorAll('.color-swatch').forEach(sw => {
+			sw.setAttribute('aria-checked', 'false')
+			sw.removeAttribute('aria-disabled')
+		})
+	})
+	if (orientationSaveBtn) orientationSaveBtn.disabled = true
+}
+
+function initOrientation() {
+	// If overlay missing, skip
+	if (!orientationOverlay || !frontChoices || !topChoices) return
+	// Build grids
+	buildColorGrid(frontChoices, 'front')
+	buildColorGrid(topChoices, 'top')
+
+	// listeners
+	frontChoices.addEventListener('click', e => {
+		const sw = e.target && e.target.closest('.color-swatch')
+		if (!sw) return
+		selectedFront = sw.dataset.color
+		selectSwatch(frontChoices, sw)
+		updateTopDisabling()
+		updateSaveEnabled()
+	})
+	topChoices.addEventListener('click', e => {
+		const sw = e.target && e.target.closest('.color-swatch')
+		if (!sw) return
+		if (sw.getAttribute('aria-disabled') === 'true') return
+		selectedTop = sw.dataset.color
+		selectSwatch(topChoices, sw)
+		updateSaveEnabled()
+	})
+	if (orientationStartBtn) {
+		orientationStartBtn.addEventListener('click', () => {
+			if (orientationStart) orientationStart.style.display = 'none'
+			if (orientationSelection) orientationSelection.hidden = false
+		})
+	}
+	if (orientationSaveBtn) {
+		orientationSaveBtn.addEventListener('click', () => {
+			const data = { front: selectedFront, top: selectedTop }
+			try {
+				localStorage.setItem(ORIENTATION_KEY, JSON.stringify(data))
+			} catch {}
+			// Zastosuj orientację kostki i mapowanie nazw
+			applyOrientationFromSelection(data)
+			closeOrientationOverlay()
+		})
+	}
+
+	// first-run: show overlay only if not saved
+	let saved = null
+	try {
+		const raw = localStorage.getItem(ORIENTATION_KEY)
+		saved = raw ? JSON.parse(raw) : null
+	} catch {}
+	if (!saved) {
+		openOrientationOverlay()
+	} else {
+		applyOrientationFromSelection(saved)
+	}
+
+	// Initialize top disabling
+	updateTopDisabling()
+	updateSaveEnabled()
+}
+
+initTheme()
 
 // ======= Model kostki =======
 const CUBE_SIZE = 3
@@ -132,17 +308,17 @@ const core = new THREE.Mesh(
 	new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE),
 	new THREE.MeshStandardMaterial({ color: 0x111318, metalness: 0.2, roughness: 0.9 })
 )
-scene.add(core)
+cubeGroup.add(core)
 
 // Spójna orientacja u/v dla wszystkich ścian: "u" = w prawo, "v" = w dół
 // (gdy patrzymy na daną ścianę jak na front)
 const faces = [
-	{ name: 'F', normal: new THREE.Vector3(0, 0, 1),  u: new THREE.Vector3(1, 0, 0),  v: new THREE.Vector3(0, -1, 0) },
+	{ name: 'F', normal: new THREE.Vector3(0, 0, 1), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, -1, 0) },
 	{ name: 'B', normal: new THREE.Vector3(0, 0, -1), u: new THREE.Vector3(-1, 0, 0), v: new THREE.Vector3(0, -1, 0) },
-	{ name: 'U', normal: new THREE.Vector3(0, 1, 0),  u: new THREE.Vector3(1, 0, 0),  v: new THREE.Vector3(0, 0, 1) },
-	{ name: 'D', normal: new THREE.Vector3(0, -1, 0), u: new THREE.Vector3(1, 0, 0),  v: new THREE.Vector3(0, 0, -1) },
-	{ name: 'R', normal: new THREE.Vector3(1, 0, 0),  u: new THREE.Vector3(0, 0, -1), v: new THREE.Vector3(0, -1, 0) },
-	{ name: 'L', normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1),  v: new THREE.Vector3(0, -1, 0) },
+	{ name: 'U', normal: new THREE.Vector3(0, 1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, 1) },
+	{ name: 'D', normal: new THREE.Vector3(0, -1, 0), u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 0, -1) },
+	{ name: 'R', normal: new THREE.Vector3(1, 0, 0), u: new THREE.Vector3(0, 0, -1), v: new THREE.Vector3(0, -1, 0) },
+	{ name: 'L', normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1), v: new THREE.Vector3(0, -1, 0) },
 ]
 
 const stickerMeshes = []
@@ -195,23 +371,23 @@ faces.forEach(face => {
 			const tile = new THREE.Mesh(tileGeom, mat)
 			tile.position.copy(center)
 			tile.lookAt(center.clone().add(face.normal))
-            const isCenter = idx === 4
-            tile.userData = { id, face: face.name, idx, center: isCenter, disabled: DISABLED_TILES.has(id) || isCenter }
-            scene.add(tile)
-            stickerMeshes.push(tile)
-            idToTile.set(id, tile)
+			const isCenter = idx === 4
+			tile.userData = { id, face: face.name, idx, center: isCenter, disabled: DISABLED_TILES.has(id) || isCenter }
+			cubeGroup.add(tile)
+			stickerMeshes.push(tile)
+			idToTile.set(id, tile)
 
-            const div = document.createElement('div')
-            div.className = 'label'
-            // Czarny kolor liter dla wszystkich pól
-            div.style.color = '#000000'
-            div.style.textShadow = 'none'
-            if ((DISABLED_TILES.has(id) || isCenter) && labels[id]) {
-                delete labels[id]
-                _disabledLabelsCleared = true
-            }
-            // Etykieta wg pozycji (id) — nazwy pól nie przemieszczają się
-            div.textContent = labels[id] || ''
+			const div = document.createElement('div')
+			div.className = 'label'
+			// Czarny kolor liter dla wszystkich pól
+			div.style.color = '#000000'
+			div.style.textShadow = 'none'
+			if ((DISABLED_TILES.has(id) || isCenter) && labels[id]) {
+				delete labels[id]
+				_disabledLabelsCleared = true
+			}
+			// Etykieta wg pozycji (id) — nazwy pól nie przemieszczają się
+			div.textContent = labels[id] || ''
 			const label = new CSS2DObject(div)
 			label.position.set(0, 0, 0.002)
 			tile.add(label)
@@ -244,241 +420,474 @@ const edges = new THREE.LineSegments(
 	new THREE.EdgesGeometry(new THREE.BoxGeometry(CUBE_SIZE + 0.001, CUBE_SIZE + 0.001, CUBE_SIZE + 0.001)),
 	new THREE.LineBasicMaterial({ color: 0x1f2937 })
 )
-scene.add(edges)
+cubeGroup.add(edges)
 
+// ======= Orientacja wg wyboru użytkownika =======
+const COLOR_TO_FACE = { white: 'U', yellow: 'D', green: 'F', blue: 'B', red: 'R', orange: 'L' }
+
+let currentOldToOriented = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
+let currentOrientedToOld = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
+
+function invertFaceMap(m) {
+	return Object.fromEntries(Object.entries(m).map(([k, v]) => [v, k]))
+}
+
+function computeOrientationQuaternion(frontFace, topFace) {
+	// frontFace, topFace: litery bazowe (U/D/F/B/R/L)
+	const nf = faces
+		.find(f => f.name === frontFace)
+		.normal.clone()
+		.normalize()
+	const nu = faces
+		.find(f => f.name === topFace)
+		.normal.clone()
+		.normalize()
+	// q1: nF -> +Z
+	const q1 = new THREE.Quaternion().setFromUnitVectors(nf, new THREE.Vector3(0, 0, 1))
+	const u1 = nu.clone().applyQuaternion(q1)
+	// obróć wokół Z tak, by u1 -> +Y
+	// Wyznacz kąt względem osi X: theta = atan2(y, x). Chcemy α = π/2 - theta,
+	// aby obrócić dowolny wektor w płaszczyźnie XY na +Y.
+	const theta = Math.atan2(u1.y, u1.x)
+	const angleZ = Math.PI / 2 - theta
+	const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), angleZ)
+	const q = new THREE.Quaternion().multiplyQuaternions(q2, q1)
+	return q
+}
+
+function deriveFaceMapFromQuaternion(q) {
+<<<<<<< ours
+	// Po rotacji q, sprawdź gdzie trafiają oryginalne normalne
+	const dirs = {
+		F: new THREE.Vector3(0, 0, 1),
+		B: new THREE.Vector3(0, 0, -1),
+		U: new THREE.Vector3(0, 1, 0),
+		D: new THREE.Vector3(0, -1, 0),
+		R: new THREE.Vector3(1, 0, 0),
+		L: new THREE.Vector3(-1, 0, 0),
+	}
+	const oldToOriented = {}
+	const axisFace = v => {
+		const x = v.x,
+			y = v.y,
+			z = v.z
+		const ax = Math.abs(x),
+			ay = Math.abs(y),
+			az = Math.abs(z)
+		if (az >= ax && az >= ay) return z >= 0 ? 'F' : 'B'
+		if (ay >= ax && ay >= az) return y >= 0 ? 'U' : 'D'
+		return x >= 0 ? 'R' : 'L'
+	}
+	for (const [face, n] of Object.entries(dirs)) {
+		// n is original normal; after q, where does it point?
+		const t = n.clone().applyQuaternion(q)
+		const o = axisFace(t)
+		oldToOriented[face] = o
+	}
+	const orientedToOld = invertFaceMap(oldToOriented)
+	return { oldToOriented, orientedToOld }
+}
+
+function toOrientedId(physId) {
+	if (!physId || typeof physId !== 'string') return physId
+	const f = physId[0]
+	const idx = physId.slice(1)
+	const nf = currentOldToOriented[f] || f
+	return nf + idx
+}
+function toPhysicalId(orientedId) {
+	if (!orientedId || typeof orientedId !== 'string') return orientedId
+	const f = orientedId[0]
+	const idx = orientedId.slice(1)
+	const of = currentOrientedToOld[f] || f
+	return of + idx
+}
+
+function applyOrientationFromSelection(sel) {
+	if (!sel || !sel.front || !sel.top) return
+	const frontFace = COLOR_TO_FACE[sel.front]
+	const topFace = COLOR_TO_FACE[sel.top]
+	if (!frontFace || !topFace) return
+	const q = computeOrientationQuaternion(frontFace, topFace)
+	cubeGroup.quaternion.copy(q)
+	const maps = deriveFaceMapFromQuaternion(q)
+	currentOldToOriented = maps.oldToOriented
+	currentOrientedToOld = maps.orientedToOld
+	// po zmianie orientacji odśwież widoczność etykiet
+	updateLabelsVisibility()
+=======
+  // Po rotacji q, sprawdź gdzie trafiają oryginalne normalne
+  const dirs = {
+    F: new THREE.Vector3(0, 0, 1),
+    B: new THREE.Vector3(0, 0, -1),
+    U: new THREE.Vector3(0, 1, 0),
+    D: new THREE.Vector3(0, -1, 0),
+    R: new THREE.Vector3(1, 0, 0),
+    L: new THREE.Vector3(-1, 0, 0),
+  }
+  const oldToOriented = {}
+  const axisFace = v => {
+    const x = v.x, y = v.y, z = v.z
+    const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z)
+    if (az >= ax && az >= ay) return z >= 0 ? 'F' : 'B'
+    if (ay >= ax && ay >= az) return y >= 0 ? 'U' : 'D'
+    return x >= 0 ? 'R' : 'L'
+  }
+  for (const [face, n] of Object.entries(dirs)) {
+    // n is original normal; after q, where does it point?
+    const t = n.clone().applyQuaternion(q)
+    const o = axisFace(t)
+    oldToOriented[face] = o
+  }
+  const orientedToOld = invertFaceMap(oldToOriented)
+  return { oldToOriented, orientedToOld }
+}
+
+function toOrientedId(physId) {
+  if (!physId || typeof physId !== 'string') return physId
+  const f = physId[0]
+  const idx = physId.slice(1)
+  const nf = currentOldToOriented[f] || f
+  return nf + idx
+}
+function toPhysicalId(orientedId) {
+  if (!orientedId || typeof orientedId !== 'string') return orientedId
+  const f = orientedId[0]
+  const idx = orientedId.slice(1)
+  const of = currentOrientedToOld[f] || f
+  return of + idx
+}
+
+function applyOrientationFromSelection(sel) {
+  if (!sel || !sel.front || !sel.top) return
+  const frontFace = COLOR_TO_FACE[sel.front]
+  const topFace = COLOR_TO_FACE[sel.top]
+  if (!frontFace || !topFace) return
+  const q = computeOrientationQuaternion(frontFace, topFace)
+  cubeGroup.quaternion.copy(q)
+  const maps = deriveFaceMapFromQuaternion(q)
+  currentOldToOriented = maps.oldToOriented
+  currentOrientedToOld = maps.orientedToOld
+  // po zmianie orientacji odśwież widoczność etykiet
+  updateLabelsVisibility()
+>>>>>>> theirs
+}
 // ======== Cubie model (rogi + krawędzie) ========
 const FACE_ORDER = ['U', 'R', 'F', 'D', 'L', 'B']
 const FACE_OFFSET = { U: 0, R: 9, F: 18, D: 27, L: 36, B: 45 }
 const posToId = Array.from({ length: 54 }, (_, i) => FACE_ORDER[Math.floor(i / 9)] + (i % 9))
 const idToPos = new Map(posToId.map((id, i) => [id, i]))
 
-const U = 'U', R = 'R', F = 'F', D = 'D', L = 'L', B = 'B'
+const U = 'U',
+	R = 'R',
+	F = 'F',
+	D = 'D',
+	L = 'L',
+	B = 'B'
 const pos = (f, i) => FACE_OFFSET[f] + i
 
 const CORNER_FACELETS = [
-  [pos(U,8), pos(R,0), pos(F,2)],
-  [pos(U,6), pos(F,0), pos(L,2)],
-  [pos(U,0), pos(L,0), pos(B,2)],
-  [pos(U,2), pos(B,0), pos(R,2)],
-  [pos(D,2), pos(F,8), pos(R,6)],
-  [pos(D,0), pos(L,8), pos(F,6)],
-  [pos(D,6), pos(B,8), pos(L,6)],
-  [pos(D,8), pos(R,8), pos(B,6)],
+	[pos(U, 8), pos(R, 0), pos(F, 2)],
+	[pos(U, 6), pos(F, 0), pos(L, 2)],
+	[pos(U, 0), pos(L, 0), pos(B, 2)],
+	[pos(U, 2), pos(B, 0), pos(R, 2)],
+	[pos(D, 2), pos(F, 8), pos(R, 6)],
+	[pos(D, 0), pos(L, 8), pos(F, 6)],
+	[pos(D, 6), pos(B, 8), pos(L, 6)],
+	[pos(D, 8), pos(R, 8), pos(B, 6)],
 ]
 const EDGE_FACELETS = [
-  [pos(U,5), pos(R,1)], [pos(U,7), pos(F,1)], [pos(U,3), pos(L,1)], [pos(U,1), pos(B,1)],
-  [pos(D,5), pos(R,7)], [pos(D,7), pos(F,7)], [pos(D,3), pos(L,7)], [pos(D,1), pos(B,7)],
-  [pos(F,5), pos(R,3)], [pos(F,3), pos(L,5)], [pos(B,3), pos(L,3)], [pos(B,5), pos(R,5)],
+	[pos(U, 5), pos(R, 1)],
+	[pos(U, 7), pos(F, 1)],
+	[pos(U, 3), pos(L, 1)],
+	[pos(U, 1), pos(B, 1)],
+	[pos(D, 5), pos(R, 7)],
+	[pos(D, 7), pos(F, 7)],
+	[pos(D, 3), pos(L, 7)],
+	[pos(D, 1), pos(B, 7)],
+	[pos(F, 5), pos(R, 3)],
+	[pos(F, 3), pos(L, 5)],
+	[pos(B, 3), pos(L, 3)],
+	[pos(B, 5), pos(R, 5)],
 ]
 const CORNER_COLORS = [
-  [U,R,F],[U,F,L],[U,L,B],[U,B,R],
-  [D,F,R],[D,L,F],[D,B,L],[D,R,B],
+	[U, R, F],
+	[U, F, L],
+	[U, L, B],
+	[U, B, R],
+	[D, F, R],
+	[D, L, F],
+	[D, B, L],
+	[D, R, B],
 ]
 const EDGE_COLORS = [
-  [U,R],[U,F],[U,L],[U,B],
-  [D,R],[D,F],[D,L],[D,B],
-  [F,R],[F,L],[B,L],[B,R],
+	[U, R],
+	[U, F],
+	[U, L],
+	[U, B],
+	[D, R],
+	[D, F],
+	[D, L],
+	[D, B],
+	[F, R],
+	[F, L],
+	[B, L],
+	[B, R],
 ]
 
-let cornerPerm = [0,1,2,3,4,5,6,7]
-let cornerOri  = [0,0,0,0,0,0,0,0]
-let edgePerm   = [0,1,2,3,4,5,6,7,8,9,10,11]
-let edgeOri    = [0,0,0,0,0,0,0,0,0,0,0,0]
+let cornerPerm = [0, 1, 2, 3, 4, 5, 6, 7]
+let cornerOri = [0, 0, 0, 0, 0, 0, 0, 0]
+let edgePerm = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+let edgeOri = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 function resetCubie() {
-  cornerPerm = [0,1,2,3,4,5,6,7]
-  cornerOri  = [0,0,0,0,0,0,0,0]
-  edgePerm   = [0,1,2,3,4,5,6,7,8,9,10,11]
-  edgeOri    = [0,0,0,0,0,0,0,0,0,0,0,0]
+	cornerPerm = [0, 1, 2, 3, 4, 5, 6, 7]
+	cornerOri = [0, 0, 0, 0, 0, 0, 0, 0]
+	edgePerm = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+	edgeOri = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 }
 
 function repaintByState() {
-  // najpierw centra
-  for (let f = 0; f < 6; f++) {
-    const face = FACE_ORDER[f]
-    const base = FACE_OFFSET[face]
-    const hex = FACE_COLORS[face]
-    for (let i = 0; i < 9; i++) {
-      const tileId = posToId[base + i]
-      const tile = idToTile.get(tileId)
-      if (!tile) continue
-      if (DISABLED_TILES.has(tileId)) {
-        const col = new THREE.Color(hex)
-        col.multiplyScalar(0.18)
-        tile.material.color.copy(col)
-      } else {
-        tile.material.color.setHex(hex)
-      }
-    }
-  }
-  // rogi
-  for (let i = 0; i < 8; i++) {
-    const p = cornerPerm[i]
-    const o = cornerOri[i]
-    const facelets = CORNER_FACELETS[i]
-    const colors = CORNER_COLORS[p]
-    for (let j = 0; j < 3; j++) {
-      const facelet = facelets[j]
-      const faceName = colors[(j + 3 - o) % 3]
-      const hex = FACE_COLORS[faceName]
-      const tileId = posToId[facelet]
-      const tile = idToTile.get(tileId)
-      if (!tile) continue
-      if (DISABLED_TILES.has(tileId)) {
-        const col = new THREE.Color(hex)
-        col.multiplyScalar(0.18)
-        tile.material.color.copy(col)
-      } else {
-        tile.material.color.setHex(hex)
-      }
-    }
-  }
-  // krawędzie
-  for (let i = 0; i < 12; i++) {
-    const p = edgePerm[i]
-    const o = edgeOri[i]
-    const facelets = EDGE_FACELETS[i]
-    const colors = EDGE_COLORS[p]
-    for (let j = 0; j < 2; j++) {
-      const facelet = facelets[j]
-      const faceName = colors[(j + 2 - o) % 2]
-      const hex = FACE_COLORS[faceName]
-      const tileId = posToId[facelet]
-      const tile = idToTile.get(tileId)
-      if (!tile) continue
-      if (DISABLED_TILES.has(tileId)) {
-        const col = new THREE.Color(hex)
-        col.multiplyScalar(0.18)
-        tile.material.color.copy(col)
-      } else {
-        tile.material.color.setHex(hex)
-      }
-    }
-  }
+	// najpierw centra
+	for (let f = 0; f < 6; f++) {
+		const face = FACE_ORDER[f]
+		const base = FACE_OFFSET[face]
+		const hex = FACE_COLORS[face]
+		for (let i = 0; i < 9; i++) {
+			const tileId = posToId[base + i]
+			const tile = idToTile.get(tileId)
+			if (!tile) continue
+			if (DISABLED_TILES.has(tileId)) {
+				const col = new THREE.Color(hex)
+				col.multiplyScalar(0.18)
+				tile.material.color.copy(col)
+			} else {
+				tile.material.color.setHex(hex)
+			}
+		}
+	}
+	// rogi
+	for (let i = 0; i < 8; i++) {
+		const p = cornerPerm[i]
+		const o = cornerOri[i]
+		const facelets = CORNER_FACELETS[i]
+		const colors = CORNER_COLORS[p]
+		for (let j = 0; j < 3; j++) {
+			const facelet = facelets[j]
+			const faceName = colors[(j + 3 - o) % 3]
+			const hex = FACE_COLORS[faceName]
+			const tileId = posToId[facelet]
+			const tile = idToTile.get(tileId)
+			if (!tile) continue
+			if (DISABLED_TILES.has(tileId)) {
+				const col = new THREE.Color(hex)
+				col.multiplyScalar(0.18)
+				tile.material.color.copy(col)
+			} else {
+				tile.material.color.setHex(hex)
+			}
+		}
+	}
+	// krawędzie
+	for (let i = 0; i < 12; i++) {
+		const p = edgePerm[i]
+		const o = edgeOri[i]
+		const facelets = EDGE_FACELETS[i]
+		const colors = EDGE_COLORS[p]
+		for (let j = 0; j < 2; j++) {
+			const facelet = facelets[j]
+			const faceName = colors[(j + 2 - o) % 2]
+			const hex = FACE_COLORS[faceName]
+			const tileId = posToId[facelet]
+			const tile = idToTile.get(tileId)
+			if (!tile) continue
+			if (DISABLED_TILES.has(tileId)) {
+				const col = new THREE.Color(hex)
+				col.multiplyScalar(0.18)
+				tile.material.color.copy(col)
+			} else {
+				tile.material.color.setHex(hex)
+			}
+		}
+	}
 }
 
 // Zwraca tablicę długości 54: dla każdego faceletu zwraca literę ściany (U/R/F/D/L/B)
 function computeFaceNameByPos() {
-  const faceNameByPos = new Array(54).fill(null)
-  // centra
-  for (let f = 0; f < 6; f++) {
-    const face = FACE_ORDER[f]
-    const base = FACE_OFFSET[face]
-    for (let i = 0; i < 9; i++) faceNameByPos[base + i] = face
-  }
-  // rogi
-  for (let i = 0; i < 8; i++) {
-    const p = cornerPerm[i]
-    const o = cornerOri[i]
-    const facelets = CORNER_FACELETS[i]
-    const colors = CORNER_COLORS[p]
-    for (let j = 0; j < 3; j++) {
-      const facelet = facelets[j]
-      const faceName = colors[(j + 3 - o) % 3]
-      faceNameByPos[facelet] = faceName
-    }
-  }
-  // krawędzie
-  for (let i = 0; i < 12; i++) {
-    const p = edgePerm[i]
-    const o = edgeOri[i]
-    const facelets = EDGE_FACELETS[i]
-    const colors = EDGE_COLORS[p]
-    for (let j = 0; j < 2; j++) {
-      const facelet = facelets[j]
-      const faceName = colors[(j + 2 - o) % 2]
-      faceNameByPos[facelet] = faceName
-    }
-  }
-  return faceNameByPos
+	const faceNameByPos = new Array(54).fill(null)
+	// centra
+	for (let f = 0; f < 6; f++) {
+		const face = FACE_ORDER[f]
+		const base = FACE_OFFSET[face]
+		for (let i = 0; i < 9; i++) faceNameByPos[base + i] = face
+	}
+	// rogi
+	for (let i = 0; i < 8; i++) {
+		const p = cornerPerm[i]
+		const o = cornerOri[i]
+		const facelets = CORNER_FACELETS[i]
+		const colors = CORNER_COLORS[p]
+		for (let j = 0; j < 3; j++) {
+			const facelet = facelets[j]
+			const faceName = colors[(j + 3 - o) % 3]
+			faceNameByPos[facelet] = faceName
+		}
+	}
+	// krawędzie
+	for (let i = 0; i < 12; i++) {
+		const p = edgePerm[i]
+		const o = edgeOri[i]
+		const facelets = EDGE_FACELETS[i]
+		const colors = EDGE_COLORS[p]
+		for (let j = 0; j < 2; j++) {
+			const facelet = facelets[j]
+			const faceName = colors[(j + 2 - o) % 2]
+			faceNameByPos[facelet] = faceName
+		}
+	}
+	return faceNameByPos
 }
 
 function updateLabelColorByCubie() {
-  // Czarny kolor liter dla wszystkich pól
-  labelMap.forEach((lbl) => {
-    lbl.element.style.color = '#000000'
-    lbl.element.style.textShadow = 'none'
-  })
+	// Czarny kolor liter dla wszystkich pól
+	labelMap.forEach(lbl => {
+		lbl.element.style.color = '#000000'
+		lbl.element.style.textShadow = 'none'
+	})
 }
 
 // ======= Litery powiązane z faceletami (podążają za elementami) =======
 let faceletLabels = Array.from({ length: 54 }, () => '')
 
 function buildLabelsObjectFromFacelets() {
-  const obj = {}
-  for (let i = 0; i < 54; i++) {
-    const val = faceletLabels[i]
-    if (val) obj[posToId[i]] = val
-  }
-  return obj
+	const obj = {}
+	for (let i = 0; i < 54; i++) {
+		const val = faceletLabels[i]
+		if (val) obj[posToId[i]] = val
+	}
+	return obj
 }
 
 function buildFaceletMappingFromCubie() {
-  // Zwraca tablicę map[posIndex] = originalFaceletIndex
-  const map = new Array(54).fill(-1)
-  // rogi
-  for (let i = 0; i < 8; i++) {
-    const p = cornerPerm[i]
-    const o = cornerOri[i]
-    const faceletsPos = CORNER_FACELETS[i]
-    const faceletsOrig = CORNER_FACELETS[p]
-    for (let j = 0; j < 3; j++) {
-      const posIndex = faceletsPos[j]
-      const origIndex = faceletsOrig[(j + 3 - o) % 3]
-      map[posIndex] = origIndex
-    }
-  }
-  // krawędzie
-  for (let i = 0; i < 12; i++) {
-    const p = edgePerm[i]
-    const o = edgeOri[i]
-    const faceletsPos = EDGE_FACELETS[i]
-    const faceletsOrig = EDGE_FACELETS[p]
-    for (let j = 0; j < 2; j++) {
-      const posIndex = faceletsPos[j]
-      const origIndex = faceletsOrig[(j + 2 - o) % 2]
-      map[posIndex] = origIndex
-    }
-  }
-  // centra: mapują się na siebie
-  for (const f of FACE_ORDER) {
-    const base = FACE_OFFSET[f]
-    const center = base + 4
-    map[center] = center
-  }
-  return map
+	// Zwraca tablicę map[posIndex] = originalFaceletIndex
+	const map = new Array(54).fill(-1)
+	// rogi
+	for (let i = 0; i < 8; i++) {
+		const p = cornerPerm[i]
+		const o = cornerOri[i]
+		const faceletsPos = CORNER_FACELETS[i]
+		const faceletsOrig = CORNER_FACELETS[p]
+		for (let j = 0; j < 3; j++) {
+			const posIndex = faceletsPos[j]
+			const origIndex = faceletsOrig[(j + 3 - o) % 3]
+			map[posIndex] = origIndex
+		}
+	}
+	// krawędzie
+	for (let i = 0; i < 12; i++) {
+		const p = edgePerm[i]
+		const o = edgeOri[i]
+		const faceletsPos = EDGE_FACELETS[i]
+		const faceletsOrig = EDGE_FACELETS[p]
+		for (let j = 0; j < 2; j++) {
+			const posIndex = faceletsPos[j]
+			const origIndex = faceletsOrig[(j + 2 - o) % 2]
+			map[posIndex] = origIndex
+		}
+	}
+	// centra: mapują się na siebie
+	for (const f of FACE_ORDER) {
+		const base = FACE_OFFSET[f]
+		const center = base + 4
+		map[center] = center
+	}
+	return map
 }
 
 function updateLabelTextsByCubie() {
-  const mapping = buildFaceletMappingFromCubie()
-for (let pos = 0; pos < 54; pos++) {
-    const id = posToId[pos]
-    const lblObj = labelMap.get(id)
-    if (!lblObj) continue
-    lblObj.element.textContent = labels[id] || ''
-  }
+	const mapping = buildFaceletMappingFromCubie()
+	for (let pos = 0; pos < 54; pos++) {
+		const id = posToId[pos]
+		const lblObj = labelMap.get(id)
+		if (!lblObj) continue
+		lblObj.element.textContent = labels[id] || ''
+	}
 }
 // Inicjalizacja: wczytaj litery z labels (id->litera) do faceletLabels,
 // następnie ustaw stan cubie na ułożony i odmaluj kolory oraz etykiety.
 for (const [id, val] of Object.entries(labels || {})) {
-  const p = idToPos.get(id)
-  if (p != null) faceletLabels[p] = val
+	const p = idToPos.get(id)
+	if (p != null) faceletLabels[p] = val
 }
 
-function cycle4(arr,a,b,c,d){ const t=arr[a]; arr[a]=arr[b]; arr[b]=arr[c]; arr[c]=arr[d]; arr[d]=t }
-function addCornerOri(a,b,c,d, da,db,dc,dd){ cornerOri[a]=(cornerOri[a]+da)%3; cornerOri[b]=(cornerOri[b]+db)%3; cornerOri[c]=(cornerOri[c]+dc)%3; cornerOri[d]=(cornerOri[d]+dd)%3 }
-function flipEdges(idxs){ for(const i of idxs) edgeOri[i]^=1 }
+function cycle4(arr, a, b, c, d) {
+	const t = arr[a]
+	arr[a] = arr[b]
+	arr[b] = arr[c]
+	arr[c] = arr[d]
+	arr[d] = t
+}
+function addCornerOri(a, b, c, d, da, db, dc, dd) {
+	cornerOri[a] = (cornerOri[a] + da) % 3
+	cornerOri[b] = (cornerOri[b] + db) % 3
+	cornerOri[c] = (cornerOri[c] + dc) % 3
+	cornerOri[d] = (cornerOri[d] + dd) % 3
+}
+function flipEdges(idxs) {
+	for (const i of idxs) edgeOri[i] ^= 1
+}
 
-function moveU(){ cycle4(cornerPerm,0,1,2,3); cycle4(edgePerm,0,1,2,3) }
-function moveD(){ cycle4(cornerPerm,4,5,6,7); cycle4(edgePerm,4,5,6,7) }
-function moveR(){ cycle4(cornerPerm,0,3,7,4); cycle4(edgePerm,0,11,4,8); addCornerOri(0,3,7,4, 2,1,2,1) }
-function moveL(){ cycle4(cornerPerm,1,2,6,5); cycle4(edgePerm,2,9,6,10); addCornerOri(1,2,6,5, 1,2,1,2) }
-function moveF(){ cycle4(cornerPerm,0,1,5,4); cycle4(edgePerm,1,9,5,8); addCornerOri(0,1,5,4, 1,2,1,2); flipEdges([1,9,5,8]) }
-function moveB(){ cycle4(cornerPerm,2,3,7,6); cycle4(edgePerm,3,11,7,10); addCornerOri(2,3,7,6, 2,1,2,1); flipEdges([3,11,7,10]) }
+function moveU() {
+	cycle4(cornerPerm, 0, 1, 2, 3)
+	cycle4(edgePerm, 0, 1, 2, 3)
+}
+function moveD() {
+	cycle4(cornerPerm, 4, 5, 6, 7)
+	cycle4(edgePerm, 4, 5, 6, 7)
+}
+function moveR() {
+	cycle4(cornerPerm, 0, 3, 7, 4)
+	cycle4(edgePerm, 0, 11, 4, 8)
+	addCornerOri(0, 3, 7, 4, 2, 1, 2, 1)
+}
+function moveL() {
+	cycle4(cornerPerm, 1, 2, 6, 5)
+	cycle4(edgePerm, 2, 9, 6, 10)
+	addCornerOri(1, 2, 6, 5, 1, 2, 1, 2)
+}
+function moveF() {
+	cycle4(cornerPerm, 0, 1, 5, 4)
+	cycle4(edgePerm, 1, 9, 5, 8)
+	addCornerOri(0, 1, 5, 4, 1, 2, 1, 2)
+	flipEdges([1, 9, 5, 8])
+}
+function moveB() {
+	cycle4(cornerPerm, 2, 3, 7, 6)
+	cycle4(edgePerm, 3, 11, 7, 10)
+	addCornerOri(2, 3, 7, 6, 2, 1, 2, 1)
+	flipEdges([3, 11, 7, 10])
+}
 
-const MOVE_FUN = { U:moveU, D:moveD, R:moveR, L:moveL, F:moveF, B:moveB }
-function applyMoveCubie(m){ const base=m[0], suf=m.length>1?m[1]:''; const fn=MOVE_FUN[base]; if(!fn) return; if(suf==="'"){fn();fn();fn()} else if(suf==='2'){fn();fn()} else {fn()} }
-function applyScrambleCubie(moves){ for(const m of moves) applyMoveCubie(m) }
+const MOVE_FUN = { U: moveU, D: moveD, R: moveR, L: moveL, F: moveF, B: moveB }
+function applyMoveCubie(m) {
+	const base = m[0],
+		suf = m.length > 1 ? m[1] : ''
+	const fn = MOVE_FUN[base]
+	if (!fn) return
+	if (suf === "'") {
+		fn()
+		fn()
+		fn()
+	} else if (suf === '2') {
+		fn()
+		fn()
+	} else {
+		fn()
+	}
+}
+function applyScrambleCubie(moves) {
+	for (const m of moves) applyMoveCubie(m)
+}
 
 // (usunięto generowanie scramble)
 
@@ -507,8 +916,8 @@ function openLetterModal(stickerId, defaultValue = '') {
 	const okBtn = document.getElementById('letterModalOk')
 	const cancelBtn = document.getElementById('letterModalCancel')
 
-    // Tytuł z oryginalnym ID pola (np. F0, U2)
-    title.textContent = `Litera dla pola ${stickerId}`
+	// Tytuł z oryginalnym ID pola (np. F0, U2)
+	title.textContent = `Litera dla pola ${stickerId}`
 	input.value = (defaultValue || '').toUpperCase()
 	input.select()
 
@@ -546,10 +955,10 @@ function openLetterModal(stickerId, defaultValue = '') {
 		cancelBtn.addEventListener('click', onCancel)
 		modal.addEventListener('click', onBackdrop)
 		window.addEventListener('keydown', onKey)
-        // wymuś uppercase na bieżąco (bez limitu długości)
-        input.addEventListener('input', () => {
-            input.value = (input.value || '').toUpperCase()
-        })
+		// wymuś uppercase na bieżąco (bez limitu długości)
+		input.addEventListener('input', () => {
+			input.value = (input.value || '').toUpperCase()
+		})
 		setTimeout(() => input.focus(), 0)
 	})
 }
@@ -579,36 +988,38 @@ renderer.domElement.addEventListener('mousemove', handleMove)
 async function handleClick(ev) {
 	const tile = pick(ev)
 	if (!tile) return
-	const { id } = tile.userData
+	const physId = tile.userData.id
+	const displayId = toOrientedId(physId)
 	const mode = document.getElementById('mode').value
-    if (mode === 'edit') {
-        if (tile.userData.disabled) {
-            showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
-            return
-        }
-        const current = labels[id] || ''
-        const val = await openLetterModal(id, current)
-        if (val === null) return
-        const clean = (val || '').trim().toUpperCase()
-        if (clean) labels[id] = clean; else delete labels[id]
-        // odśwież UI pozycyjnie
-        const lbl = labelMap.get(id)
-        if (lbl) lbl.element.textContent = clean
-        saveLabels(labels)
-        updateLabelsVisibility()
-    } else {
-        // W trybie quiz: zablokuj bufory i środki tak jak w edycji
-        if (tile.userData.disabled) {
-            showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
-            return
-        }
-        // Sprawdź literę przypisaną do pozycji (id)
-        const target = (labels[id] || '').toUpperCase()
-        if (!target) {
-            showToast(`Dla ${id} nie ustawiono litery.`)
-            return
-        }
-        const guessRaw = await openLetterModal(id, '')
+	if (mode === 'edit') {
+		if (tile.userData.disabled) {
+			showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
+			return
+		}
+		const current = labels[physId] || ''
+		const val = await openLetterModal(displayId, current)
+		if (val === null) return
+		const clean = (val || '').trim().toUpperCase()
+		if (clean) labels[physId] = clean
+		else delete labels[physId]
+		// odśwież UI pozycyjnie
+		const lbl = labelMap.get(physId)
+		if (lbl) lbl.element.textContent = clean
+		saveLabels(labels)
+		updateLabelsVisibility()
+	} else {
+		// W trybie quiz: zablokuj bufory i środki tak jak w edycji
+		if (tile.userData.disabled) {
+			showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
+			return
+		}
+		// Sprawdź literę przypisaną do pozycji (id)
+		const target = (labels[physId] || '').toUpperCase()
+		if (!target) {
+			showToast(`Dla ${displayId} nie ustawiono litery.`)
+			return
+		}
+		const guessRaw = await openLetterModal(displayId, '')
 		if (guessRaw === null) return
 		const guess = (guessRaw || '').trim().toUpperCase()
 		showToast(guess === target ? '✅ Dobrze!' : `❌ Nie. Poprawna: ${target}`, 2000)
@@ -658,22 +1069,25 @@ updateLabelsVisibility()
 // Tryb quiz: po przełączeniu na "quiz (zgaduj)" ukryj literki na start
 const modeSelect = document.getElementById('mode')
 if (modeSelect) {
-  modeSelect.addEventListener('change', () => {
-    if (modeSelect.value === 'quiz') {
-      toggle.checked = false
-      updateLabelsVisibility()
-    }
-  })
+	modeSelect.addEventListener('change', () => {
+		if (modeSelect.value === 'quiz') {
+			toggle.checked = false
+			updateLabelsVisibility()
+		}
+	})
 }
 
 // Reset / eksport / import
 document.getElementById('reset').addEventListener('click', () => {
-    if (!confirm('Na pewno usunąć wszystkie literki?')) return
-    labels = {}
-    saveLabels(labels)
-    labelMap.forEach((lbl) => (lbl.element.textContent = ''))
-    updateLabelsVisibility()
-    showToast('Wyczyszczono.')
+	if (!confirm('Na pewno usunąć wszystkie literki?')) return
+	labels = {}
+	saveLabels(labels)
+	labelMap.forEach(lbl => (lbl.element.textContent = ''))
+	updateLabelsVisibility()
+	showToast('Wyczyszczono.')
+	// Po resecie literek otwórz kreator orientacji od ekranu Start
+	resetOrientationWizardState()
+	openOrientationOverlay()
 })
 document.getElementById('export').addEventListener('click', () => {
 	const data = JSON.stringify(labels, null, 2)
@@ -694,23 +1108,25 @@ document.getElementById('import').addEventListener('click', () => {
 		if (!file) return
 		const reader = new FileReader()
 		reader.onload = () => {
-            try {
-                labels = JSON.parse(String(reader.result || '{}')) || {}
-                let changed = false
-                for (const id of Object.keys(labels)) {
-                    if (DISABLED_TILES.has(id) || CENTER_IDS.has(id)) {
-                        delete labels[id]
-                        changed = true
-                    }
-                }
-                saveLabels(labels)
-                // Odśwież etykiety wg pozycji
-                labelMap.forEach((lbl, id) => { lbl.element.textContent = labels[id] || '' })
-                updateLabelsVisibility()
-                showToast('Zaimportowano.')
-            } catch {
-                alert('Nieprawidłowy plik JSON')
-            }
+			try {
+				labels = JSON.parse(String(reader.result || '{}')) || {}
+				let changed = false
+				for (const id of Object.keys(labels)) {
+					if (DISABLED_TILES.has(id) || CENTER_IDS.has(id)) {
+						delete labels[id]
+						changed = true
+					}
+				}
+				saveLabels(labels)
+				// Odśwież etykiety wg pozycji
+				labelMap.forEach((lbl, id) => {
+					lbl.element.textContent = labels[id] || ''
+				})
+				updateLabelsVisibility()
+				showToast('Zaimportowano.')
+			} catch {
+				alert('Nieprawidłowy plik JSON')
+			}
 		}
 		reader.readAsText(file)
 	}
@@ -742,6 +1158,9 @@ function tick() {
 updateLabelsVisibility()
 tick()
 
+// Zastosuj orientację (jeśli ustawiona) i ewentualnie pokaż kreator przy pierwszym uruchomieniu
+initOrientation()
+
 // ================== Mini‑scena: trening pojedynczego elementu (tylko tryb na miejscu) ==================
 // DOM elementy (przyciski uruchamiające trener na miejscu)
 const btnOpenEdge = document.getElementById('openEdgePieceQuiz')
@@ -771,14 +1190,14 @@ function tileCenterFor(face, row, col) {
 }
 
 function indexFor(face, pos) {
-    // Stabilne zaokrąglenie z tolerancją (po zmianie orientacji u/v)
-    const uRaw = pos.clone().dot(face.u) / TILE
-    const vRaw = pos.clone().dot(face.v) / TILE
-    const u = THREE.MathUtils.clamp(Math.round(uRaw + EPS), -1, 1)
-    const v = THREE.MathUtils.clamp(Math.round(vRaw + EPS), -1, 1)
-    const col = u + 1
-    const row = v + 1
-    return row * 3 + col
+	// Stabilne zaokrąglenie z tolerancją (po zmianie orientacji u/v)
+	const uRaw = pos.clone().dot(face.u) / TILE
+	const vRaw = pos.clone().dot(face.v) / TILE
+	const u = THREE.MathUtils.clamp(Math.round(uRaw + EPS), -1, 1)
+	const v = THREE.MathUtils.clamp(Math.round(vRaw + EPS), -1, 1)
+	const col = u + 1
+	const row = v + 1
+	return row * 3 + col
 }
 
 function neighborFacesFor(face, row, col) {
@@ -788,31 +1207,31 @@ function neighborFacesFor(face, row, col) {
 	const center = tileCenterFor(face, row, col)
 	const res = []
 	if (uCoord === 0 && vCoord === 0) return res // środek – brak sąsiadów
-    if (uCoord !== 0 && vCoord !== 0) {
-        // róg – dwie ściany (top/bottom zależnie od znaku vCoord)
-        const n1 = face.v.clone().multiplyScalar(Math.sign(vCoord))
-        const f1 = findFaceByNormal(n1)
-        if (f1) {
-            const idx1 = indexFor(f1, center)
-            res.push({ face: f1, row: Math.floor(idx1 / 3), col: idx1 % 3, id: `${f1.name}${idx1}` })
-        }
+	if (uCoord !== 0 && vCoord !== 0) {
+		// róg – dwie ściany (top/bottom zależnie od znaku vCoord)
+		const n1 = face.v.clone().multiplyScalar(Math.sign(vCoord))
+		const f1 = findFaceByNormal(n1)
+		if (f1) {
+			const idx1 = indexFor(f1, center)
+			res.push({ face: f1, row: Math.floor(idx1 / 3), col: idx1 % 3, id: `${f1.name}${idx1}` })
+		}
 		const n2 = face.u.clone().multiplyScalar(Math.sign(uCoord))
 		const f2 = findFaceByNormal(n2)
 		if (f2) {
 			const idx2 = indexFor(f2, center)
 			res.push({ face: f2, row: Math.floor(idx2 / 3), col: idx2 % 3, id: `${f2.name}${idx2}` })
 		}
-    } else {
-        // krawędź – jedna ściana
-        let n
-        if (uCoord === 0) n = face.v.clone().multiplyScalar(Math.sign(vCoord))
-        else n = face.u.clone().multiplyScalar(Math.sign(uCoord))
-        const fn = findFaceByNormal(n)
-        if (fn) {
-            const idx = indexFor(fn, center)
-            res.push({ face: fn, row: Math.floor(idx / 3), col: idx % 3, id: `${fn.name}${idx}` })
-        }
-    }
+	} else {
+		// krawędź – jedna ściana
+		let n
+		if (uCoord === 0) n = face.v.clone().multiplyScalar(Math.sign(vCoord))
+		else n = face.u.clone().multiplyScalar(Math.sign(uCoord))
+		const fn = findFaceByNormal(n)
+		if (fn) {
+			const idx = indexFor(fn, center)
+			res.push({ face: fn, row: Math.floor(idx / 3), col: idx % 3, id: `${fn.name}${idx}` })
+		}
+	}
 	return res
 }
 
@@ -961,25 +1380,25 @@ function startPieceTrainer(kind) {
 	dl.position.set(3, 4, 2)
 	tScene.add(dl)
 
-  let group = null
-  let lastIdsKey = null // aby unikać powtórzenia tego samego elementu
+	let group = null
+	let lastIdsKey = null // aby unikać powtórzenia tego samego elementu
 	const { EDGES, CORNERS } = computePieces()
 
 	function pool() {
 		return kind === 'edge' ? EDGES : CORNERS
 	}
-  function pick() {
-    const all = pool()
-    const ready = all.filter(ids => ids.every(id => !!labels[id]))
-    let src = ready.length ? ready : all
-    // unikaj powtórki tego samego elementu, jeśli mamy więcej niż jedną opcję
-    if (src.length > 1 && lastIdsKey) {
-      const filtered = src.filter(ids => ids.join('+') !== lastIdsKey)
-      if (filtered.length) src = filtered
-    }
-    if (src.length === 0) return null
-    return src[Math.floor(Math.random() * src.length)]
-  }
+	function pick() {
+		const all = pool()
+		const ready = all.filter(ids => ids.every(id => !!labels[id]))
+		let src = ready.length ? ready : all
+		// unikaj powtórki tego samego elementu, jeśli mamy więcej niż jedną opcję
+		if (src.length > 1 && lastIdsKey) {
+			const filtered = src.filter(ids => ids.join('+') !== lastIdsKey)
+			if (filtered.length) src = filtered
+		}
+		if (src.length === 0) return null
+		return src[Math.floor(Math.random() * src.length)]
+	}
 	function show(ids) {
 		if (group) {
 			tScene.remove(group)
@@ -991,32 +1410,32 @@ function startPieceTrainer(kind) {
 				}
 			})
 		}
-    const builder = ids.length === 2 ? buildEdgePiece : buildCornerPiece
-    group = builder({ name: ids.join('-'), stickers: ids })
-    orientGroupToCamera(group, ids, tCamera)
-    // Ustaw pozycję w pionie zależnie od urządzenia: desktop = środek, mobile = wyżej
-    adjustGroupY()
-    tScene.add(group)
-    lastIdsKey = ids.join('+')
-  }
-  function renderFields(ids) {
-    trainerFields.innerHTML = ''
-    const FACE_NAMES = { U: 'Biały', D: 'Żółty', F: 'Zielony', B: 'Niebieski', R: 'Czerwony', L: 'Pomarańczowy' }
-    ids.forEach((id, idx) => {
-      const face = id[0]
-      const colorHex = FACE_COLORS[face]
-      const row = document.createElement('div')
-      row.className = 'sticker-row'
-      const sw = document.createElement('span')
-      sw.className = 'sticker-swatch'
-      sw.style.background = `#${colorHex.toString(16).padStart(6, '0')}`
-      const lab = document.createElement('span')
-      lab.className = 'sticker-id'
-      lab.textContent = FACE_NAMES[face] || id
-      lab.title = id // zachowaj surowe ID jako podpowiedź
-      const inp = document.createElement('input')
-      inp.className = 'sticker-input'
-      inp.dataset.id = id
+		const builder = ids.length === 2 ? buildEdgePiece : buildCornerPiece
+		group = builder({ name: ids.join('-'), stickers: ids })
+		orientGroupToCamera(group, ids, tCamera)
+		// Ustaw pozycję w pionie zależnie od urządzenia: desktop = środek, mobile = wyżej
+		adjustGroupY()
+		tScene.add(group)
+		lastIdsKey = ids.join('+')
+	}
+	function renderFields(ids) {
+		trainerFields.innerHTML = ''
+		const FACE_NAMES = { U: 'Biały', D: 'Żółty', F: 'Zielony', B: 'Niebieski', R: 'Czerwony', L: 'Pomarańczowy' }
+		ids.forEach((id, idx) => {
+			const face = id[0]
+			const colorHex = FACE_COLORS[face]
+			const row = document.createElement('div')
+			row.className = 'sticker-row'
+			const sw = document.createElement('span')
+			sw.className = 'sticker-swatch'
+			sw.style.background = `#${colorHex.toString(16).padStart(6, '0')}`
+			const lab = document.createElement('span')
+			lab.className = 'sticker-id'
+			lab.textContent = FACE_NAMES[face] || toOrientedId(id)
+			lab.title = toOrientedId(id) // pokaż zorientowane ID jako podpowiedź
+			const inp = document.createElement('input')
+			inp.className = 'sticker-input'
+			inp.dataset.id = id
 			row.appendChild(sw)
 			row.appendChild(lab)
 			row.appendChild(inp)
