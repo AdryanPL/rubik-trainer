@@ -8,7 +8,7 @@ const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x0b0f14)
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100)
-camera.position.set(5, 4, 6)
+camera.position.set(0, 4, 10)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -57,6 +57,40 @@ function applyMainCameraDistance(force = false) {
 // Zastosuj na starcie i przy zmianie rozmiaru
 applyMainCameraDistance(true)
 window.addEventListener('resize', () => applyMainCameraDistance())
+
+// Przywrócenie domyślnego widoku kamery (po zmianie orientacji)
+function resetCameraView() {
+    // Bazowa pozycja zgodnie z inicjalizacją
+    camera.position.set(0, 4, 10)
+    // Cel na środek sceny/kostki
+    if (controls && controls.target) controls.target.set(0, 0, 0)
+    camera.lookAt(0, 0, 0)
+    // Dopasuj dystans dla mobile/desktop i zaktualizuj kontroler
+    applyMainCameraDistance(true)
+    controls.update()
+}
+
+// Ustal, czy wszystkie wymagane pola (bez centrów i buforów) mają literki
+function areAllRequiredLogicalFilled() {
+    const needed = new Set()
+    for (let pos = 0; pos < 54; pos++) {
+        const physId = posToId[pos]
+        const logical = canonicalLogicalId(physicalIdToLogicalId(physId))
+        if (CENTER_IDS.has(logical)) continue
+        if (DISABLED_LOGICAL.has(logical)) continue
+        needed.add(logical)
+    }
+    for (const key of needed) {
+        if (!labels[key] || String(labels[key]).trim() === '') return false
+    }
+    return true
+}
+
+function setLettersToggleByProgress() {
+    if (!toggle) return
+    toggle.checked = areAllRequiredLogicalFilled()
+    updateLabelsVisibility()
+}
 
 // Hamburger menu (mobile): toggles #ui visibility
 const menuToggle = document.getElementById('menuToggle')
@@ -132,11 +166,12 @@ if (themeToggle)
 // ======= Pierwsze uruchomienie: wybór orientacji (front/top) =======
 const ORIENTATION_KEY = 'rubik_orientation_v1'
 const orientationOverlay = document.getElementById('orientationOverlay')
-const orientationStart = document.getElementById('orientationStart')
-const orientationStartBtn = document.getElementById('orientationStartBtn')
-const orientationSelection = document.getElementById('orientationSelection')
+const stepTop = document.getElementById('orientationStepTop')
+const stepFront = document.getElementById('orientationStepFront')
 const frontChoices = document.getElementById('frontChoices')
 const topChoices = document.getElementById('topChoices')
+const orientationNextBtn = document.getElementById('orientationNextBtn')
+const orientationBackBtn = document.getElementById('orientationBackBtn')
 const orientationSaveBtn = document.getElementById('orientationSaveBtn')
 
 const COLOR_HEX = {
@@ -160,9 +195,9 @@ const OPPOSITE = { white: 'yellow', yellow: 'white', green: 'blue', blue: 'green
 let selectedFront = null
 let selectedTop = null
 
-function buildColorGrid(container, group) {
+function buildColorGrid(container, colors) {
 	container.innerHTML = ''
-	;['white', 'yellow', 'green', 'blue', 'red', 'orange'].forEach(c => {
+	colors.forEach(c => {
 		const sw = document.createElement('button')
 		sw.type = 'button'
 		sw.className = 'color-swatch'
@@ -175,21 +210,7 @@ function buildColorGrid(container, group) {
 	})
 }
 
-function updateTopDisabling() {
-	const swatches = topChoices ? Array.from(topChoices.querySelectorAll('.color-swatch')) : []
-	for (const sw of swatches) {
-		const c = sw.dataset.color
-		const dis = !!selectedFront && (c === selectedFront || c === OPPOSITE[selectedFront])
-		sw.setAttribute('aria-disabled', dis ? 'true' : 'false')
-	}
-	// jeśli aktualnie wybrana góra stała się nielegalna, usuń wybór
-	if (selectedFront && selectedTop && (selectedTop === selectedFront || selectedTop === OPPOSITE[selectedFront])) {
-		// clear selection
-		const prev = topChoices.querySelector(`.color-swatch[aria-checked='true']`)
-		if (prev) prev.setAttribute('aria-checked', 'false')
-		selectedTop = null
-	}
-}
+// top/front disabling handled by step filtering; no-op placeholder
 
 function updateSaveEnabled() {
 	const ok = !!selectedFront && !!selectedTop
@@ -218,64 +239,77 @@ function closeOrientationOverlay() {
 }
 
 function resetOrientationWizardState() {
-	// Przywróć krok Start i wyczyść wybory
+	// Przywróć krok "Wybierz górę" i wyczyść wybory
 	selectedFront = null
 	selectedTop = null
-	if (orientationStart) orientationStart.style.display = '' // wróć do CSS (grid)
-	if (orientationSelection)
-		orientationSelection.hidden = true
-		// wyczyść zaznaczenia
-	;[frontChoices, topChoices].forEach(container => {
+	if (stepTop) stepTop.hidden = false
+	if (stepFront) stepFront.hidden = true
+	if (topChoices) buildColorGrid(topChoices, ['white','yellow','green','blue','red','orange'])
+	if (frontChoices) frontChoices.innerHTML = ''
+	const grids = [frontChoices, topChoices]
+	grids.forEach(container => {
 		if (!container) return
-		container.querySelectorAll('.color-swatch').forEach(sw => {
-			sw.setAttribute('aria-checked', 'false')
-			sw.removeAttribute('aria-disabled')
-		})
+		container.querySelectorAll('.color-swatch').forEach(sw => sw.setAttribute('aria-checked','false'))
 	})
 	if (orientationSaveBtn) orientationSaveBtn.disabled = true
+	if (orientationNextBtn) orientationNextBtn.disabled = true
 }
 
 function initOrientation() {
 	// If overlay missing, skip
 	if (!orientationOverlay || !frontChoices || !topChoices) return
-	// Build grids
-	buildColorGrid(frontChoices, 'front')
-	buildColorGrid(topChoices, 'top')
+	// Build top step grid
+	buildColorGrid(topChoices, ['white','yellow','green','blue','red','orange'])
 
 	// listeners
+	topChoices.addEventListener('click', e => {
+		const sw = e.target && e.target.closest('.color-swatch')
+		if (!sw) return
+		selectedTop = sw.dataset.color
+		selectSwatch(topChoices, sw)
+		if (orientationNextBtn) orientationNextBtn.disabled = !selectedTop
+	})
 	frontChoices.addEventListener('click', e => {
 		const sw = e.target && e.target.closest('.color-swatch')
 		if (!sw) return
 		selectedFront = sw.dataset.color
 		selectSwatch(frontChoices, sw)
-		updateTopDisabling()
 		updateSaveEnabled()
 	})
-	topChoices.addEventListener('click', e => {
-		const sw = e.target && e.target.closest('.color-swatch')
-		if (!sw) return
-		if (sw.getAttribute('aria-disabled') === 'true') return
-		selectedTop = sw.dataset.color
-		selectSwatch(topChoices, sw)
-		updateSaveEnabled()
-	})
-	if (orientationStartBtn) {
-		orientationStartBtn.addEventListener('click', () => {
-			if (orientationStart) orientationStart.style.display = 'none'
-			if (orientationSelection) orientationSelection.hidden = false
+	if (orientationNextBtn) {
+		orientationNextBtn.addEventListener('click', () => {
+			const all = ['white','yellow','green','blue','red','orange']
+			const invalid = new Set([selectedTop, OPPOSITE[selectedTop]])
+			const allowed = all.filter(c => !invalid.has(c))
+			buildColorGrid(frontChoices, allowed)
+			selectedFront = null
+			updateSaveEnabled()
+			if (stepTop) stepTop.hidden = true
+			if (stepFront) stepFront.hidden = false
 		})
 	}
-	if (orientationSaveBtn) {
-		orientationSaveBtn.addEventListener('click', () => {
-			const data = { front: selectedFront, top: selectedTop }
-			try {
-				localStorage.setItem(ORIENTATION_KEY, JSON.stringify(data))
-			} catch {}
-			// Zastosuj orientację kostki i mapowanie nazw
-			applyOrientationFromSelection(data)
-			closeOrientationOverlay()
+	if (orientationBackBtn) {
+		orientationBackBtn.addEventListener('click', () => {
+			if (stepFront) stepFront.hidden = true
+			if (stepTop) stepTop.hidden = false
+			if (orientationNextBtn) orientationNextBtn.disabled = !selectedTop
 		})
 	}
+  if (orientationSaveBtn) {
+    orientationSaveBtn.addEventListener('click', () => {
+      const data = { front: selectedFront, top: selectedTop }
+      try {
+        localStorage.setItem(ORIENTATION_KEY, JSON.stringify(data))
+      } catch {}
+      applyOrientationFromSelection(data)
+      // Po zatwierdzeniu wyboru przywróć widok kamery do pozycji bazowej
+      resetCameraView()
+      // Po zatwierdzeniu: odznacz "Pokaż literki" i ukryj kropki tylko dla liter
+      if (toggle) toggle.checked = false
+      updateLabelsVisibility()
+      closeOrientationOverlay()
+    })
+  }
 
 	// first-run: show overlay only if not saved
 	let saved = null
@@ -283,18 +317,18 @@ function initOrientation() {
 		const raw = localStorage.getItem(ORIENTATION_KEY)
 		saved = raw ? JSON.parse(raw) : null
 	} catch {}
-  if (!saved) {
-    openOrientationOverlay()
-  } else {
-    applyOrientationFromSelection(saved)
-  }
+	if (!saved) {
+		resetOrientationWizardState()
+		openOrientationOverlay()
+	} else {
+		applyOrientationFromSelection(saved)
+	}
 
-  // Initialize top disabling
-  updateTopDisabling()
   updateSaveEnabled()
-  // Ensure disabled flags and labels are in sync with current mapping (even before choose)
   refreshDisabledByLogic()
   refreshAllLabelTexts()
+  // Ustaw checkbox wg progressu na starcie
+  setLettersToggleByProgress()
 }
 
 initTheme()
@@ -334,7 +368,8 @@ const labelMap = new Map()
 const dotMap = new Map()
 const idToTile = new Map()
 // Bufory definiowane LOGICZNIE (niezależnie od orientacji)
-const DISABLED_LOGICAL = new Set(['U0', 'U5'])
+// Edge buffers: U5, R1; Corner buffers: U0, B2, L0
+const DISABLED_LOGICAL = new Set(['U0', 'U5', 'R1', 'B2', 'L0'])
 const DOT_BLOCKED = new Set(DISABLED_LOGICAL)
 const CENTER_IDS = new Set(['U4', 'D4', 'F4', 'B4', 'R4', 'L4'])
 
@@ -422,15 +457,19 @@ faces.forEach(face => {
 				if (labels[lid]) delete labels[lid]
 				_disabledLabelsCleared = true
 			}
-			// Etykieta wg LOGICZNEGO ID niezależnego od orientacji
-			div.textContent = labels[physicalIdToLogicalId(id)] || ''
+			// Etykieta wg LOGICZNEGO ID (z aliasami buforów)
+			{
+				const lid = physicalIdToLogicalId(id)
+				const canon = canonicalLogicalId(lid)
+				div.textContent = labels[canon] || ''
+			}
 			const label = new CSS2DObject(div)
 			label.position.set(0, 0, 0.002)
 			tile.add(label)
 			if (!div.textContent) label.element.style.display = 'none'
 			labelMap.set(id, label)
 
-			if (idx !== 4 && !DOT_BLOCKED.has(id)) {
+			if (idx !== 4) {
 				const dotGeom = new THREE.CircleGeometry(0.055, 24)
 				const dotMat = new THREE.MeshBasicMaterial({
 					// Czarne kropki na białych (U) i żółtych (D) polach; w innych białe
@@ -776,10 +815,17 @@ function updateLabelColorByCubie() {
 	})
 }
 
+function canonicalLogicalId(logId) {
+  if (logId === 'R1') return 'U5'
+  if (logId === 'B2' || logId === 'L0') return 'U0'
+  return logId
+}
+
 function refreshAllLabelTexts() {
   labelMap.forEach((lbl, physId) => {
     const logical = physicalIdToLogicalId(physId)
-    lbl.element.textContent = labels[logical] || ''
+    const canon = canonicalLogicalId(logical)
+    lbl.element.textContent = labels[canon] || ''
   })
 }
 
@@ -1032,12 +1078,13 @@ async function handleClick(ev) {
 			showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
 			return
 		}
-		const current = labels[logicalId] || ''
-		const val = await openLetterModal(logicalId, current)
+    const current = labels[canonicalLogicalId(logicalId)] || ''
+    const val = await openLetterModal(canonicalLogicalId(logicalId), current)
 		if (val === null) return
 		const clean = (val || '').trim().toUpperCase()
-		if (clean) labels[logicalId] = clean
-		else delete labels[logicalId]
+    const key = canonicalLogicalId(logicalId)
+    if (clean) labels[key] = clean
+    else delete labels[key]
 		// odśwież UI pozycyjnie
 		const lbl = labelMap.get(physId)
 		if (lbl) lbl.element.textContent = clean
@@ -1050,12 +1097,12 @@ async function handleClick(ev) {
 			return
 		}
 		// Sprawdź literę przypisaną do pozycji (id)
-		const target = (labels[logicalId] || '').toUpperCase()
+    const target = (labels[canonicalLogicalId(logicalId)] || '').toUpperCase()
 		if (!target) {
 			showToast(`Dla ${logicalId} nie ustawiono litery.`)
 			return
 		}
-		const guessRaw = await openLetterModal(logicalId, '')
+    const guessRaw = await openLetterModal(canonicalLogicalId(logicalId), '')
 		if (guessRaw === null) return
 		const guess = (guessRaw || '').trim().toUpperCase()
 		showToast(guess === target ? '✅ Dobrze!' : `❌ Nie. Poprawna: ${target}`, 2000)
@@ -1077,21 +1124,24 @@ function updateLabelsVisibility() {
 		const hasText = !!lbl.element.textContent
 
 		let facing = false
-		if (hasText && showLetters) {
+		if (hasText) {
 			tile.getWorldPosition(_tmpPos)
 			tile.getWorldDirection(_tmpDir)
 			_toCam.copy(camera.position).sub(_tmpPos).normalize()
 			facing = _tmpDir.dot(_toCam) > 0.05
 		}
-		const show = !!(showLetters && hasText && facing && !tile.userData.disabled)
+		// Literki: widoczne zawsze, jeśli są ustawione, płytka jest widoczna i nie jest disabled
+		const show = !!(hasText && facing && !tile.userData.disabled)
 		lbl.visible = show
 		lbl.element.style.display = show ? 'block' : 'none'
 	}
-	// kropki: tylko dla pustych pól i gdy literki ukryte
+	// Kropki: gdy checkbox zaznaczony – ukryj, gdy odznaczony – pokaż tylko na pustych polach
 	dotMap.forEach((dot, id) => {
 		const lbl = labelMap.get(id)
 		const hasText = !!(lbl && lbl.element.textContent)
-		dot.visible = !showLetters && !hasText
+		const tile = idToTile.get(id)
+		const disabled = tile ? tile.userData.disabled : false
+		dot.visible = !showLetters && !hasText && !disabled
 	})
 }
 toggle.addEventListener('change', updateLabelsVisibility)
@@ -1119,6 +1169,7 @@ document.getElementById('reset').addEventListener('click', () => {
 	labels = {}
 	saveLabels(labels)
 	labelMap.forEach(lbl => (lbl.element.textContent = ''))
+	if (toggle) toggle.checked = false
 	updateLabelsVisibility()
 	showToast('Wyczyszczono.')
 	// Po resecie literek otwórz kreator orientacji od ekranu Start
@@ -1146,16 +1197,17 @@ document.getElementById('import').addEventListener('click', () => {
 		reader.onload = () => {
 			try {
 				labels = JSON.parse(String(reader.result || '{}')) || {}
-				let changed = false
-				for (const id of Object.keys(labels)) {
-					if (DISABLED_LOGICAL.has(id) || CENTER_IDS.has(id)) {
-						delete labels[id]
-						changed = true
-					}
+				// Przepisz aliasy buforów na kanoniczne klucze i usuń centra
+				const rewritten = {}
+				for (const [k, v] of Object.entries(labels)) {
+					const canon = canonicalLogicalId(k)
+					if (!CENTER_IDS.has(canon)) rewritten[canon] = v
 				}
+				labels = rewritten
 				saveLabels(labels)
-				// Odśwież etykiety wg LOGICZNEGO ID
+				// Odśwież etykiety wg LOGICZNEGO ID i ustaw checkbox wg progressu
 				refreshAllLabelTexts()
+				setLettersToggleByProgress()
 				updateLabelsVisibility()
 				showToast('Zaimportowano.')
 			} catch {
@@ -1423,7 +1475,7 @@ function startPieceTrainer(kind) {
 	}
 	function pick() {
 		const all = pool()
-		const ready = all.filter(ids => ids.every(id => !!labels[physicalIdToLogicalId(id)]))
+    const ready = all.filter(ids => ids.every(id => !!labels[canonicalLogicalId(physicalIdToLogicalId(id))]))
 		let src = ready.length ? ready : all
 		// unikaj powtórki tego samego elementu, jeśli mamy więcej niż jedną opcję
 		if (src.length > 1 && lastIdsKey) {
@@ -1517,8 +1569,8 @@ function startPieceTrainer(kind) {
 		rows.forEach(inp => inp.classList.remove('wrong'))
 		for (const inp of rows) {
 			const id = inp.dataset.id
-			const logical = physicalIdToLogicalId(id)
-			const expected = (labels[logical] || '').toUpperCase()
+    const logical = physicalIdToLogicalId(id)
+    const expected = (labels[canonicalLogicalId(logical)] || '').toUpperCase()
 			const guess = (inp.value || '').trim().toUpperCase()
 			if (guess === expected && expected) ok++
 			else inp.classList.add('wrong')

@@ -44,8 +44,8 @@
 			</div>
 			<div class="row">
 				<button id="reset">Reset literek</button>
-				<button id="export">Eksportuj JSON</button>
-				<button id="import">Importuj JSON</button>
+				<button id="export">Eksportuj oznaczenia</button>
+				<button id="import">Importuj oznaczenia</button>
 			</div>
 			<div class="row">
 				<button id="openEdgePieceQuiz">Trening elementów — krawędź (mini 3D)</button>
@@ -82,24 +82,26 @@
 			</div>
 		</div>
 
-		<!-- Pierwsze uruchomienie: wybór orientacji kostki -->
+		<!-- Pierwsze uruchomienie: wybór orientacji kostki (dwukrokowy) -->
 		<div id="orientationOverlay" aria-hidden="true">
 			<div class="orientation-card">
-				<div id="orientationStart">
-					<button id="orientationStartBtn">Start</button>
-				</div>
-				<div id="orientationSelection" hidden>
-					<h2>Wybierz orientację kostki</h2>
+				<div id="orientationStepTop">
+					<h2>Wybierz górę kostki</h2>
 					<div class="orientation-section">
-						<h3>Wybierz front</h3>
-						<div class="color-grid" id="frontChoices" role="radiogroup" aria-label="Wybierz kolor frontu"></div>
-					</div>
-					<div class="orientation-section">
-						<h3>Wybierz górę kostki</h3>
 						<div class="color-grid" id="topChoices" role="radiogroup" aria-label="Wybierz kolor góry"></div>
 					</div>
 					<div class="toolbar">
-						<button id="orientationSaveBtn" disabled>Zapisz</button>
+						<button id="orientationNextBtn" disabled>Wybierz front</button>
+					</div>
+				</div>
+				<div id="orientationStepFront" hidden>
+					<h2>Wybierz front</h2>
+					<div class="orientation-section">
+						<div class="color-grid" id="frontChoices" role="radiogroup" aria-label="Wybierz kolor frontu"></div>
+					</div>
+					<div class="toolbar">
+						<button id="orientationBackBtn">Wróć</button>
+						<button id="orientationSaveBtn" disabled>Zatwierdź</button>
 					</div>
 				</div>
 			</div>

@@ -410,7 +410,9 @@ body[data-theme='light'] {
 	padding: 20px 0 6px;
 }
 #orientationStartBtn,
-#orientationSaveBtn {
+#orientationSaveBtn,
+#orientationNextBtn,
+#orientationBackBtn {
 	background: #111827;
 	color: #e5e7eb;
 	border: 1px solid #374151;
@@ -420,7 +422,9 @@ body[data-theme='light'] {
 	cursor: pointer;
 }
 #orientationStartBtn:hover,
-#orientationSaveBtn:hover {
+#orientationSaveBtn:hover,
+#orientationNextBtn:hover,
+#orientationBackBtn:hover {
 	background: #0f172a;
 }
 #orientationSaveBtn[disabled] {
