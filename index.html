@@ -82,6 +82,29 @@
 			</div>
 		</div>
 
+		<!-- Pierwsze uruchomienie: wybór orientacji kostki -->
+		<div id="orientationOverlay" aria-hidden="true">
+			<div class="orientation-card">
+				<div id="orientationStart">
+					<button id="orientationStartBtn">Start</button>
+				</div>
+				<div id="orientationSelection" hidden>
+					<h2>Wybierz orientację kostki</h2>
+					<div class="orientation-section">
+						<h3>Wybierz front</h3>
+						<div class="color-grid" id="frontChoices" role="radiogroup" aria-label="Wybierz kolor frontu"></div>
+					</div>
+					<div class="orientation-section">
+						<h3>Wybierz górę kostki</h3>
+						<div class="color-grid" id="topChoices" role="radiogroup" aria-label="Wybierz kolor góry"></div>
+					</div>
+					<div class="toolbar">
+						<button id="orientationSaveBtn" disabled>Zapisz</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<!-- Usunięto: modal mini‑sceny (#pieceQuizModal) — pozostaje tylko tryb trenera na miejscu kostki -->
 
 		<!-- Główny moduł -->

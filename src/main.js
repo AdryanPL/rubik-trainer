@@ -283,15 +283,18 @@ function initOrientation() {
 		const raw = localStorage.getItem(ORIENTATION_KEY)
 		saved = raw ? JSON.parse(raw) : null
 	} catch {}
-	if (!saved) {
-		openOrientationOverlay()
-	} else {
-		applyOrientationFromSelection(saved)
-	}
+  if (!saved) {
+    openOrientationOverlay()
+  } else {
+    applyOrientationFromSelection(saved)
+  }
 
-	// Initialize top disabling
-	updateTopDisabling()
-	updateSaveEnabled()
+  // Initialize top disabling
+  updateTopDisabling()
+  updateSaveEnabled()
+  // Ensure disabled flags and labels are in sync with current mapping (even before choose)
+  refreshDisabledByLogic()
+  refreshAllLabelTexts()
 }
 
 initTheme()
@@ -321,28 +324,61 @@ const faces = [
 	{ name: 'L', normal: new THREE.Vector3(-1, 0, 0), u: new THREE.Vector3(0, 0, 1), v: new THREE.Vector3(0, -1, 0) },
 ]
 
+// Mapowanie orientacji (domyślnie referencyjne)
+let currentOldToOriented = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
+let currentOrientedToOld = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
+let faceRotationSteps = { U: 0, D: 0, F: 0, B: 0, R: 0, L: 0 }
+
 const stickerMeshes = []
 const labelMap = new Map()
 const dotMap = new Map()
 const idToTile = new Map()
-// Bufory (wyłączone pola): krawędź = U5, R1; róg = U0, L0, B2
-const DISABLED_TILES = new Set(['U5', 'R1', 'U0', 'L0', 'B2'])
-const DOT_BLOCKED = new Set(DISABLED_TILES)
+// Bufory definiowane LOGICZNIE (niezależnie od orientacji)
+const DISABLED_LOGICAL = new Set(['U0', 'U5'])
+const DOT_BLOCKED = new Set(DISABLED_LOGICAL)
 const CENTER_IDS = new Set(['U4', 'D4', 'F4', 'B4', 'R4', 'L4'])
 
 // ======= Persistencja =======
 const STORAGE_KEY = 'rubik_labels_v1'
+const LABELS_VERSION_KEY = 'rubik_labels_version'
+// Mapowanie fizyczny↔logiczny (w referencji są tożsame; zostawiamy funkcje dla czytelności)
+function physicalIdToLogicalId(physId) {
+    // Logiczne ID w aktualnej orientacji: stary (fizyczny) -> zorientowany (logiczny)
+    return toOrientedId(physId)
+}
+function logicalIdToPhysicalId(logId) {
+    // Odwrócenie: logiczny (zorientowany) -> fizyczny (referencyjny)
+    return toPhysicalId(logId)
+}
 function loadLabels() {
+	let obj = {}
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY)
-		return raw ? JSON.parse(raw) : {}
+		obj = raw ? JSON.parse(raw) : {}
 	} catch {
-		return {}
+		obj = {}
 	}
+	// Migracja do ID logicznych (v2)
+	let ver = 1
+	try {
+		ver = parseInt(localStorage.getItem(LABELS_VERSION_KEY) || '1', 10)
+	} catch {}
+	if (ver === 2) return obj
+	const migrated = {}
+	for (const [k, v] of Object.entries(obj)) {
+		const logical = physicalIdToLogicalId(k)
+		if (!CENTER_IDS.has(logical)) migrated[logical] = v
+	}
+	try {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated))
+		localStorage.setItem(LABELS_VERSION_KEY, '2')
+	} catch {}
+	return migrated
 }
 function saveLabels(obj) {
 	try {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
+		localStorage.setItem(LABELS_VERSION_KEY, '2')
 	} catch {}
 }
 let labels = loadLabels()
@@ -367,12 +403,11 @@ faces.forEach(face => {
 			// Naklejki w głównej scenie: użyj materiału nieoświetlanego, jak w mini‑treningu,
 			// aby kolory były spójne niezależnie od świateł.
 			const mat = new THREE.MeshBasicMaterial({ color })
-			if (DISABLED_TILES.has(id)) mat.color.multiplyScalar(0.18) // przyciemnienie buforów
 			const tile = new THREE.Mesh(tileGeom, mat)
 			tile.position.copy(center)
 			tile.lookAt(center.clone().add(face.normal))
 			const isCenter = idx === 4
-			tile.userData = { id, face: face.name, idx, center: isCenter, disabled: DISABLED_TILES.has(id) || isCenter }
+			tile.userData = { id, face: face.name, idx, center: isCenter, disabled: isCenter }
 			cubeGroup.add(tile)
 			stickerMeshes.push(tile)
 			idToTile.set(id, tile)
@@ -382,12 +417,13 @@ faces.forEach(face => {
 			// Czarny kolor liter dla wszystkich pól
 			div.style.color = '#000000'
 			div.style.textShadow = 'none'
-			if ((DISABLED_TILES.has(id) || isCenter) && labels[id]) {
-				delete labels[id]
+			if (isCenter) {
+				const lid = physicalIdToLogicalId(id)
+				if (labels[lid]) delete labels[lid]
 				_disabledLabelsCleared = true
 			}
-			// Etykieta wg pozycji (id) — nazwy pól nie przemieszczają się
-			div.textContent = labels[id] || ''
+			// Etykieta wg LOGICZNEGO ID niezależnego od orientacji
+			div.textContent = labels[physicalIdToLogicalId(id)] || ''
 			const label = new CSS2DObject(div)
 			label.position.set(0, 0, 0.002)
 			tile.add(label)
@@ -425,9 +461,6 @@ cubeGroup.add(edges)
 // ======= Orientacja wg wyboru użytkownika =======
 const COLOR_TO_FACE = { white: 'U', yellow: 'D', green: 'F', blue: 'B', red: 'R', orange: 'L' }
 
-let currentOldToOriented = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
-let currentOrientedToOld = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
-
 function invertFaceMap(m) {
 	return Object.fromEntries(Object.entries(m).map(([k, v]) => [v, k]))
 }
@@ -456,7 +489,6 @@ function computeOrientationQuaternion(frontFace, topFace) {
 }
 
 function deriveFaceMapFromQuaternion(q) {
-<<<<<<< ours
 	// Po rotacji q, sprawdź gdzie trafiają oryginalne normalne
 	const dirs = {
 		F: new THREE.Vector3(0, 0, 1),
@@ -481,26 +513,67 @@ function deriveFaceMapFromQuaternion(q) {
 	for (const [face, n] of Object.entries(dirs)) {
 		// n is original normal; after q, where does it point?
 		const t = n.clone().applyQuaternion(q)
-		const o = axisFace(t)
-		oldToOriented[face] = o
-	}
-	const orientedToOld = invertFaceMap(oldToOriented)
-	return { oldToOriented, orientedToOld }
+    const o = axisFace(t)
+    oldToOriented[face] = o
+  }
+  const orientedToOld = invertFaceMap(oldToOriented)
+  // compute per-face rotation of indices (0,1,2,3) CW so that old face grid aligns to canonical grid of the oriented face
+  const axisEquals = (a, b) => a.clone().normalize().dot(b.clone().normalize()) > 0.98
+  for (const oldFace of ['U','D','F','B','R','L']) {
+    const newFace = oldToOriented[oldFace]
+    // old face basis in world after applying q (how the physical face sits now)
+    const uOld = faces.find(f => f.name === oldFace).u.clone().applyQuaternion(q)
+    const vOld = faces.find(f => f.name === oldFace).v.clone().applyQuaternion(q)
+    // target canonical basis for the oriented face in world (no q!)
+    const uCan = faces.find(f => f.name === newFace).u.clone()
+    const vCan = faces.find(f => f.name === newFace).v.clone()
+    let rot = 0
+    if (axisEquals(uOld, uCan) && axisEquals(vOld, vCan)) rot = 0
+    else if (axisEquals(uOld, vCan) && axisEquals(vOld, uCan.clone().negate())) rot = 1
+    else if (axisEquals(uOld, uCan.clone().negate()) && axisEquals(vOld, vCan.clone().negate())) rot = 2
+    else if (axisEquals(uOld, vCan.clone().negate()) && axisEquals(vOld, uCan)) rot = 3
+    else rot = 0
+    faceRotationSteps[oldFace] = rot
+  }
+  return { oldToOriented, orientedToOld }
+}
+
+function rotateIndexCW(idx, steps) {
+  steps = ((steps % 4) + 4) % 4
+  const r = Math.floor(idx / 3)
+  const c = idx % 3
+  let nr = r, nc = c
+  if (steps === 1) {
+    nr = c
+    nc = 2 - r
+  } else if (steps === 2) {
+    nr = 2 - r
+    nc = 2 - c
+  } else if (steps === 3) {
+    nr = 2 - c
+    nc = r
+  }
+  return nr * 3 + nc
 }
 
 function toOrientedId(physId) {
-	if (!physId || typeof physId !== 'string') return physId
-	const f = physId[0]
-	const idx = physId.slice(1)
-	const nf = currentOldToOriented[f] || f
-	return nf + idx
+  if (!physId || typeof physId !== 'string') return physId
+  const f = physId[0]
+  const idx = Number(physId.slice(1))
+  const nf = currentOldToOriented[f] || f
+  const steps = faceRotationSteps[f] || 0
+  const nidx = rotateIndexCW(idx, steps)
+  return nf + String(nidx)
 }
 function toPhysicalId(orientedId) {
-	if (!orientedId || typeof orientedId !== 'string') return orientedId
-	const f = orientedId[0]
-	const idx = orientedId.slice(1)
-	const of = currentOrientedToOld[f] || f
-	return of + idx
+  if (!orientedId || typeof orientedId !== 'string') return orientedId
+  const f = orientedId[0]
+  const idx = Number(orientedId.slice(1))
+  const of = currentOrientedToOld[f] || f
+  const steps = faceRotationSteps[of] || 0
+  const back = (4 - (steps % 4)) % 4
+  const pidx = rotateIndexCW(idx, back)
+  return of + String(pidx)
 }
 
 function applyOrientationFromSelection(sel) {
@@ -510,67 +583,14 @@ function applyOrientationFromSelection(sel) {
 	if (!frontFace || !topFace) return
 	const q = computeOrientationQuaternion(frontFace, topFace)
 	cubeGroup.quaternion.copy(q)
-	const maps = deriveFaceMapFromQuaternion(q)
-	currentOldToOriented = maps.oldToOriented
-	currentOrientedToOld = maps.orientedToOld
-	// po zmianie orientacji odśwież widoczność etykiet
-	updateLabelsVisibility()
-=======
-  // Po rotacji q, sprawdź gdzie trafiają oryginalne normalne
-  const dirs = {
-    F: new THREE.Vector3(0, 0, 1),
-    B: new THREE.Vector3(0, 0, -1),
-    U: new THREE.Vector3(0, 1, 0),
-    D: new THREE.Vector3(0, -1, 0),
-    R: new THREE.Vector3(1, 0, 0),
-    L: new THREE.Vector3(-1, 0, 0),
-  }
-  const oldToOriented = {}
-  const axisFace = v => {
-    const x = v.x, y = v.y, z = v.z
-    const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z)
-    if (az >= ax && az >= ay) return z >= 0 ? 'F' : 'B'
-    if (ay >= ax && ay >= az) return y >= 0 ? 'U' : 'D'
-    return x >= 0 ? 'R' : 'L'
-  }
-  for (const [face, n] of Object.entries(dirs)) {
-    // n is original normal; after q, where does it point?
-    const t = n.clone().applyQuaternion(q)
-    const o = axisFace(t)
-    oldToOriented[face] = o
-  }
-  const orientedToOld = invertFaceMap(oldToOriented)
-  return { oldToOriented, orientedToOld }
-}
-
-function toOrientedId(physId) {
-  if (!physId || typeof physId !== 'string') return physId
-  const f = physId[0]
-  const idx = physId.slice(1)
-  const nf = currentOldToOriented[f] || f
-  return nf + idx
-}
-function toPhysicalId(orientedId) {
-  if (!orientedId || typeof orientedId !== 'string') return orientedId
-  const f = orientedId[0]
-  const idx = orientedId.slice(1)
-  const of = currentOrientedToOld[f] || f
-  return of + idx
-}
-
-function applyOrientationFromSelection(sel) {
-  if (!sel || !sel.front || !sel.top) return
-  const frontFace = COLOR_TO_FACE[sel.front]
-  const topFace = COLOR_TO_FACE[sel.top]
-  if (!frontFace || !topFace) return
-  const q = computeOrientationQuaternion(frontFace, topFace)
-  cubeGroup.quaternion.copy(q)
   const maps = deriveFaceMapFromQuaternion(q)
   currentOldToOriented = maps.oldToOriented
   currentOrientedToOld = maps.orientedToOld
-  // po zmianie orientacji odśwież widoczność etykiet
+  // po zmianie orientacji odśwież blokady, teksty, kolory i widoczność etykiet
+  refreshDisabledByLogic()
+  refreshAllLabelTexts()
+  repaintByState()
   updateLabelsVisibility()
->>>>>>> theirs
 }
 // ======== Cubie model (rogi + krawędzie) ========
 const FACE_ORDER = ['U', 'R', 'F', 'D', 'L', 'B']
@@ -657,7 +677,7 @@ function repaintByState() {
 			const tileId = posToId[base + i]
 			const tile = idToTile.get(tileId)
 			if (!tile) continue
-			if (DISABLED_TILES.has(tileId)) {
+			if (tile.userData.disabled) {
 				const col = new THREE.Color(hex)
 				col.multiplyScalar(0.18)
 				tile.material.color.copy(col)
@@ -679,7 +699,7 @@ function repaintByState() {
 			const tileId = posToId[facelet]
 			const tile = idToTile.get(tileId)
 			if (!tile) continue
-			if (DISABLED_TILES.has(tileId)) {
+			if (tile.userData.disabled) {
 				const col = new THREE.Color(hex)
 				col.multiplyScalar(0.18)
 				tile.material.color.copy(col)
@@ -701,7 +721,7 @@ function repaintByState() {
 			const tileId = posToId[facelet]
 			const tile = idToTile.get(tileId)
 			if (!tile) continue
-			if (DISABLED_TILES.has(tileId)) {
+			if (tile.userData.disabled) {
 				const col = new THREE.Color(hex)
 				col.multiplyScalar(0.18)
 				tile.material.color.copy(col)
@@ -756,6 +776,21 @@ function updateLabelColorByCubie() {
 	})
 }
 
+function refreshAllLabelTexts() {
+  labelMap.forEach((lbl, physId) => {
+    const logical = physicalIdToLogicalId(physId)
+    lbl.element.textContent = labels[logical] || ''
+  })
+}
+
+function refreshDisabledByLogic() {
+  stickerMeshes.forEach(tile => {
+    const physId = tile.userData.id
+    const logical = physicalIdToLogicalId(physId)
+    tile.userData.disabled = tile.userData.center || DISABLED_LOGICAL.has(logical)
+  })
+}
+
 // ======= Litery powiązane z faceletami (podążają za elementami) =======
 let faceletLabels = Array.from({ length: 54 }, () => '')
 
@@ -805,13 +840,14 @@ function buildFaceletMappingFromCubie() {
 }
 
 function updateLabelTextsByCubie() {
-	const mapping = buildFaceletMappingFromCubie()
-	for (let pos = 0; pos < 54; pos++) {
-		const id = posToId[pos]
-		const lblObj = labelMap.get(id)
-		if (!lblObj) continue
-		lblObj.element.textContent = labels[id] || ''
-	}
+    const mapping = buildFaceletMappingFromCubie()
+    for (let pos = 0; pos < 54; pos++) {
+        const id = posToId[pos]
+        const lblObj = labelMap.get(id)
+        if (!lblObj) continue
+        const logical = physicalIdToLogicalId(id)
+        lblObj.element.textContent = labels[logical] || ''
+    }
 }
 // Inicjalizacja: wczytaj litery z labels (id->litera) do faceletLabels,
 // następnie ustaw stan cubie na ułożony i odmaluj kolory oraz etykiety.
@@ -989,19 +1025,19 @@ async function handleClick(ev) {
 	const tile = pick(ev)
 	if (!tile) return
 	const physId = tile.userData.id
-	const displayId = toOrientedId(physId)
+	const logicalId = physicalIdToLogicalId(physId)
 	const mode = document.getElementById('mode').value
 	if (mode === 'edit') {
 		if (tile.userData.disabled) {
 			showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
 			return
 		}
-		const current = labels[physId] || ''
-		const val = await openLetterModal(displayId, current)
+		const current = labels[logicalId] || ''
+		const val = await openLetterModal(logicalId, current)
 		if (val === null) return
 		const clean = (val || '').trim().toUpperCase()
-		if (clean) labels[physId] = clean
-		else delete labels[physId]
+		if (clean) labels[logicalId] = clean
+		else delete labels[logicalId]
 		// odśwież UI pozycyjnie
 		const lbl = labelMap.get(physId)
 		if (lbl) lbl.element.textContent = clean
@@ -1014,12 +1050,12 @@ async function handleClick(ev) {
 			return
 		}
 		// Sprawdź literę przypisaną do pozycji (id)
-		const target = (labels[physId] || '').toUpperCase()
+		const target = (labels[logicalId] || '').toUpperCase()
 		if (!target) {
-			showToast(`Dla ${displayId} nie ustawiono litery.`)
+			showToast(`Dla ${logicalId} nie ustawiono litery.`)
 			return
 		}
-		const guessRaw = await openLetterModal(displayId, '')
+		const guessRaw = await openLetterModal(logicalId, '')
 		if (guessRaw === null) return
 		const guess = (guessRaw || '').trim().toUpperCase()
 		showToast(guess === target ? '✅ Dobrze!' : `❌ Nie. Poprawna: ${target}`, 2000)
@@ -1112,16 +1148,14 @@ document.getElementById('import').addEventListener('click', () => {
 				labels = JSON.parse(String(reader.result || '{}')) || {}
 				let changed = false
 				for (const id of Object.keys(labels)) {
-					if (DISABLED_TILES.has(id) || CENTER_IDS.has(id)) {
+					if (DISABLED_LOGICAL.has(id) || CENTER_IDS.has(id)) {
 						delete labels[id]
 						changed = true
 					}
 				}
 				saveLabels(labels)
-				// Odśwież etykiety wg pozycji
-				labelMap.forEach((lbl, id) => {
-					lbl.element.textContent = labels[id] || ''
-				})
+				// Odśwież etykiety wg LOGICZNEGO ID
+				refreshAllLabelTexts()
 				updateLabelsVisibility()
 				showToast('Zaimportowano.')
 			} catch {
@@ -1389,7 +1423,7 @@ function startPieceTrainer(kind) {
 	}
 	function pick() {
 		const all = pool()
-		const ready = all.filter(ids => ids.every(id => !!labels[id]))
+		const ready = all.filter(ids => ids.every(id => !!labels[physicalIdToLogicalId(id)]))
 		let src = ready.length ? ready : all
 		// unikaj powtórki tego samego elementu, jeśli mamy więcej niż jedną opcję
 		if (src.length > 1 && lastIdsKey) {
@@ -1431,8 +1465,8 @@ function startPieceTrainer(kind) {
 			sw.style.background = `#${colorHex.toString(16).padStart(6, '0')}`
 			const lab = document.createElement('span')
 			lab.className = 'sticker-id'
-			lab.textContent = FACE_NAMES[face] || toOrientedId(id)
-			lab.title = toOrientedId(id) // pokaż zorientowane ID jako podpowiedź
+			lab.textContent = FACE_NAMES[face] || id
+			lab.title = id // logiczne ID w podpowiedzi
 			const inp = document.createElement('input')
 			inp.className = 'sticker-input'
 			inp.dataset.id = id
@@ -1483,7 +1517,8 @@ function startPieceTrainer(kind) {
 		rows.forEach(inp => inp.classList.remove('wrong'))
 		for (const inp of rows) {
 			const id = inp.dataset.id
-			const expected = (labels[id] || '').toUpperCase()
+			const logical = physicalIdToLogicalId(id)
+			const expected = (labels[logical] || '').toUpperCase()
 			const guess = (inp.value || '').trim().toUpperCase()
 			if (guess === expected && expected) ok++
 			else inp.classList.add('wrong')

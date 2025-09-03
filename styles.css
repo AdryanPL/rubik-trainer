@@ -364,3 +364,94 @@ body[data-theme='light'] {
 .label.hidden {
 	opacity: 0;
 }
+
+/* ===== Pierwsze uruchomienie: overlay wyboru orientacji ===== */
+#orientationOverlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.55);
+	backdrop-filter: blur(2px);
+	display: none; /* toggled by .open */
+	z-index: 70;
+}
+#orientationOverlay.open {
+	display: block;
+}
+#orientationOverlay .orientation-card {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: min(520px, 92vw);
+	background: rgba(17, 24, 39, 0.96);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 16px;
+	padding: 16px;
+	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+	display: grid;
+	gap: 14px;
+	animation: letter-pop 200ms ease-out both;
+}
+#orientationOverlay h2 {
+	margin: 0 0 6px;
+	font-size: 18px;
+	color: #f3f4f6;
+	font-weight: 600;
+}
+#orientationOverlay h3 {
+	margin: 8px 0 6px;
+	font-size: 14px;
+	color: #d1d5db;
+	font-weight: 600;
+}
+#orientationStart {
+	display: grid;
+	place-items: center;
+	padding: 20px 0 6px;
+}
+#orientationStartBtn,
+#orientationSaveBtn {
+	background: #111827;
+	color: #e5e7eb;
+	border: 1px solid #374151;
+	border-radius: 10px;
+	padding: 10px 14px;
+	font-size: 14px;
+	cursor: pointer;
+}
+#orientationStartBtn:hover,
+#orientationSaveBtn:hover {
+	background: #0f172a;
+}
+#orientationSaveBtn[disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.orientation-section {
+	display: grid;
+	gap: 8px;
+}
+.color-grid {
+	display: grid;
+	grid-template-columns: repeat(6, 1fr);
+	gap: 8px;
+}
+.color-swatch {
+	width: 32px;
+	height: 32px;
+	border-radius: 6px;
+	border: 1px solid rgba(0, 0, 0, 0.35);
+	cursor: pointer;
+	position: relative;
+}
+.color-swatch[aria-checked='true']::after {
+	content: '';
+	position: absolute;
+	inset: -4px;
+	border-radius: 10px;
+	border: 2px solid #60a5fa;
+}
+.color-swatch[aria-disabled='true'] {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
