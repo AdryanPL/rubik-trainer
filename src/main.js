@@ -117,8 +117,9 @@ function openActiveProfile() {
   try { if (typeof closeOrientationOverlay === 'function') closeOrientationOverlay() } catch {}
   // 3) Pokaż widok kostki
   showCube()
-  // 4) Ustaw checkbox wg progresu (jeśli funkcja istnieje)
+  // 4) Ustaw checkbox wg progresu (jeśli funkcja istnieje) i widoczność przełącznika wg trybu
   try { if (typeof setLettersToggleByProgress === 'function') setLettersToggleByProgress() } catch {}
+  try { updateToggleVisibilityByMode() } catch {}
 }
 
 function renderProfilesList() {
@@ -471,22 +472,24 @@ function initOrientation() {
 			if (orientationNextBtn) orientationNextBtn.disabled = !selectedTop
 		})
 	}
-	if (orientationSaveBtn) {
-		orientationSaveBtn.addEventListener('click', () => {
-			const data = { front: selectedFront, top: selectedTop }
-			try {
-				localStorage.setItem(ORIENTATION_KEY, JSON.stringify(data))
-			} catch {}
-			applyOrientationFromSelection(data)
-			updateOrientationSummaryUI(data)
-			// Po zatwierdzeniu wyboru przywróć widok kamery do pozycji bazowej
-			resetCameraView()
-			// Po zatwierdzeniu: odznacz "Pokaż literki" i ukryj kropki tylko dla liter
-			if (toggle) toggle.checked = false
-			updateLabelsVisibility()
-			closeOrientationOverlay()
-		})
-	}
+  if (orientationSaveBtn) {
+    orientationSaveBtn.addEventListener('click', () => {
+      const data = { front: selectedFront, top: selectedTop }
+      // Persist orientation to active profile instead of legacy keys
+      try {
+        const ap = getActiveProfile()
+        if (ap) updateProfile(ap.id, { orientation: { top: selectedTop, front: selectedFront } })
+      } catch {}
+      applyOrientationFromSelection(data)
+      updateOrientationSummaryUI(data)
+      // Po zatwierdzeniu wyboru przywróć widok kamery do pozycji bazowej
+      resetCameraView()
+      // Po zatwierdzeniu: odznacz "Pokaż literki" i ukryj kropki tylko dla liter
+      if (toggle) toggle.checked = false
+      updateLabelsVisibility()
+      closeOrientationOverlay()
+    })
+  }
 
 	// first-run: show overlay only if not saved
 	let saved = null
@@ -1379,6 +1382,13 @@ function updateLabelsVisibility() {
 }
 toggle.addEventListener('change', updateLabelsVisibility)
 
+// Pokazuj przełącznik "Ukryj oznaczenia" tylko w trybie quiz
+function updateToggleVisibilityByMode() {
+    const labelEl = toggle ? toggle.closest('label') : null
+    const modeEl = document.getElementById('mode')
+    if (labelEl) labelEl.style.display = modeEl && modeEl.value === 'quiz' ? 'inline-flex' : 'none'
+}
+
 // Inicjalne odmalowanie po pełnej inicjalizacji
 resetCubie()
 repaintByState()
@@ -1445,7 +1455,6 @@ document.getElementById('import').addEventListener('click', () => {
 					if (!CENTER_IDS.has(canon)) rewritten[canon] = v
 				}
 				labels = rewritten
-                saveLabels(labels)
                 { const ap = getActiveProfile(); if (ap) updateProfile(ap.id, { labels }) }
 				// Odśwież etykiety wg LOGICZNEGO ID i ustaw checkbox wg progressu
 				refreshAllLabelTexts()
