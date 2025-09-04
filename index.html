@@ -17,6 +17,19 @@
 		<link rel="stylesheet" href="./styles.css" />
 	</head>
 	<body>
+		<!-- Widok główny (menu startowe) -->
+		<div id="homeView">
+			<h1>Aplikacja do nauki blindfold 3x3</h1>
+			<div class="row">
+				<button id="newProfileBtn">Nowa kostka</button>
+				<button id="openProfilesBtn">Wczytaj kostkę</button>
+			</div>
+			<div id="profilesList"></div>
+		</div>
+
+		<!-- Widok kostki (scena + UI) -->
+		<div id="cubeView" class="hidden">
+			<button id="backToHome" aria-label="Powrót do menu">×</button>
 		<!-- Hamburger (mobile) -->
 		<button id="menuToggle" aria-label="Menu" aria-expanded="false" aria-controls="ui">☰</button>
 		<div id="app"></div>
@@ -43,7 +56,7 @@
 				<label> <input type="checkbox" id="toggleLetters" checked /> Ukryj oznaczenia </label>
 			</div>
 			<div class="row">
-				<button id="reset">Reset literek</button>
+				<button id="reset">Reset literek i układu</button>
 				<button id="export">Eksportuj oznaczenia</button>
 				<button id="import">Importuj oznaczenia</button>
 			</div>
@@ -65,6 +78,19 @@
 				Obracaj: LPM • Przesuwaj: PPM/WASD • Zoom: kółko<br />
 				Kliknij naklejkę: wpisz literę (puste = usuń). Litery zapisują się w przeglądarce.
 			</div>
+			<div id="orientationSummary" class="orientation-summary">
+				<div class="orientation-summary__title">Twoje ustawienie kostki</div>
+				<div class="orientation-summary-inline">
+					<div class="orientation-summary__row">
+						<span class="orientation-summary__label">Wybrana góra:</span>
+						<span id="summaryTopSwatch" class="orientation-swatch empty" aria-label="Góra"></span>
+					</div>
+					<div class="orientation-summary__row">
+						<span class="orientation-summary__label">Wybrany front:</span>
+						<span id="summaryFrontSwatch" class="orientation-swatch empty" aria-label="Front"></span>
+					</div>
+				</div>
+			</div>
 		</div>
 
 		<div id="toast"></div>
@@ -82,6 +108,19 @@
 			</div>
 		</div>
 
+		<!-- Modal potwierdzenia resetu literek -->
+		<div id="resetModal" aria-hidden="true">
+			<div class="letter-modal__backdrop"></div>
+			<div class="letter-modal__content" role="dialog" aria-modal="true" aria-labelledby="resetModalTitle">
+				<h2 id="resetModalTitle">Zresetować literki?</h2>
+				<p id="resetModalDesc" class="modal-desc">Ta operacja usunie wszystkie literki.</p>
+				<div class="toolbar">
+					<button id="resetCancel">Anuluj</button>
+					<button id="resetConfirm">Zresetuj literki</button>
+				</div>
+			</div>
+		</div>
+
 		<!-- Pierwsze uruchomienie: wybór orientacji kostki (dwukrokowy) -->
 		<div id="orientationOverlay" aria-hidden="true">
 			<div class="orientation-card">
@@ -91,7 +130,7 @@
 						<div class="color-grid" id="topChoices" role="radiogroup" aria-label="Wybierz kolor góry"></div>
 					</div>
 					<div class="toolbar">
-						<button id="orientationNextBtn" disabled>Wybierz front</button>
+						<button id="orientationNextBtn" disabled>Dalej</button>
 					</div>
 				</div>
 				<div id="orientationStepFront" hidden>
@@ -105,6 +144,8 @@
 					</div>
 				</div>
 			</div>
+		</div>
+
 		</div>
 
 		<!-- Usunięto: modal mini‑sceny (#pieceQuizModal) — pozostaje tylko tryb trenera na miejscu kostki -->

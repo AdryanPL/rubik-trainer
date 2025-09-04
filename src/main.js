@@ -4,6 +4,9 @@ import { CSS2DRenderer, CSS2DObject } from '../vendor/three/examples/jsm/rendere
 
 // ======= Scena / kamera / renderery =======
 const app = document.getElementById('app')
+// View containers
+const homeView = document.getElementById('homeView')
+const cubeView = document.getElementById('cubeView')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x0b0f14)
 
@@ -21,7 +24,87 @@ labelRenderer.domElement.style.position = 'fixed'
 labelRenderer.domElement.style.inset = '0'
 labelRenderer.domElement.style.pointerEvents = 'none'
 labelRenderer.domElement.style.zIndex = '5'
-document.body.appendChild(labelRenderer.domElement)
+;(cubeView || document.body).appendChild(labelRenderer.domElement)
+
+// Simple view switching
+function showHome() {
+  if (homeView) homeView.classList.remove('hidden')
+  if (cubeView) cubeView.classList.add('hidden')
+}
+function showCube() {
+  if (homeView) homeView.classList.add('hidden')
+  if (cubeView) cubeView.classList.remove('hidden')
+}
+// Expose for manual testing in console
+try {
+  window.showHome = showHome
+  window.showCube = showCube
+} catch {}
+// Start at home view
+showHome()
+
+// ======= Profiles storage API (localStorage) =======
+const PROFILES_KEY = 'RUBIK_PROFILES_V1'
+const ACTIVE_ID_KEY = 'RUBIK_ACTIVE_PROFILE_ID'
+
+function uuid() {
+  return (crypto?.randomUUID?.() || ('id-' + Math.random().toString(36).slice(2) + Date.now()))
+}
+function loadProfiles() {
+  try { return JSON.parse(localStorage.getItem(PROFILES_KEY) || '[]') } catch { return [] }
+}
+function saveProfiles(arr) { localStorage.setItem(PROFILES_KEY, JSON.stringify(arr)) }
+function getActiveProfileId() { return localStorage.getItem(ACTIVE_ID_KEY) }
+function setActiveProfileId(id) { if (id) localStorage.setItem(ACTIVE_ID_KEY, id); else localStorage.removeItem(ACTIVE_ID_KEY) }
+function getActiveProfile() { const id = getActiveProfileId(); if (!id) return null; return loadProfiles().find(p => p.id === id) || null }
+function createProfile({ name, orientation }) {
+  const p = { id: uuid(), name, labels: {}, orientation, createdAt: Date.now(), updatedAt: Date.now() }
+  const arr = loadProfiles(); arr.push(p); saveProfiles(arr); setActiveProfileId(p.id); return p
+}
+function updateProfile(id, patch) {
+  const arr = loadProfiles(); const i = arr.findIndex(p => p.id === id); if (i < 0) return; arr[i] = { ...arr[i], ...patch, updatedAt: Date.now() }; saveProfiles(arr)
+}
+function deleteProfile(id) { const arr = loadProfiles().filter(p => p.id !== id); saveProfiles(arr); if (getActiveProfileId() === id) setActiveProfileId(null) }
+
+// Expose profiles API for console usage
+try {
+  Object.assign(window, {
+    uuid,
+    loadProfiles,
+    saveProfiles,
+    getActiveProfileId,
+    setActiveProfileId,
+    getActiveProfile,
+    createProfile,
+    updateProfile,
+    deleteProfile,
+  })
+} catch {}
+
+// ======= One-time migration of old storage to first profile =======
+function migrateIfNeeded() {
+  if (loadProfiles().length) return
+  let oldLabels = null, oldOri = null
+  try { oldLabels = JSON.parse(localStorage.getItem('rubik_labels_v1') || 'null') } catch {}
+  try { oldOri = JSON.parse(localStorage.getItem('rubik_orientation_v1') || 'null') } catch {}
+  if (!oldLabels && !oldOri) return
+  const orientation = oldOri || { top: 'white', front: 'green' }
+  const p = createProfile({ name: 'Mój układ (zmigrowany)', orientation })
+  p.labels = oldLabels || {}
+  updateProfile(p.id, { labels: p.labels, orientation: p.orientation })
+  localStorage.removeItem('rubik_labels_v1')
+  localStorage.removeItem('rubik_orientation_v1')
+}
+
+// Call migration early (before the rest of UI initialization uses old keys)
+migrateIfNeeded()
+
+// Back button to return to home view
+const backToHomeBtn = document.getElementById('backToHome')
+if (backToHomeBtn) backToHomeBtn.onclick = () => {
+  try { stopPieceTrainer() } catch {}
+  showHome()
+}
 
 // Grupa główna kostki (łatwa rotacja orientacji)
 const cubeGroup = new THREE.Group()
@@ -60,36 +143,36 @@ window.addEventListener('resize', () => applyMainCameraDistance())
 
 // Przywrócenie domyślnego widoku kamery (po zmianie orientacji)
 function resetCameraView() {
-    // Bazowa pozycja zgodnie z inicjalizacją
-    camera.position.set(0, 4, 10)
-    // Cel na środek sceny/kostki
-    if (controls && controls.target) controls.target.set(0, 0, 0)
-    camera.lookAt(0, 0, 0)
-    // Dopasuj dystans dla mobile/desktop i zaktualizuj kontroler
-    applyMainCameraDistance(true)
-    controls.update()
+	// Bazowa pozycja zgodnie z inicjalizacją
+	camera.position.set(0, 4, 10)
+	// Cel na środek sceny/kostki
+	if (controls && controls.target) controls.target.set(0, 0, 0)
+	camera.lookAt(0, 0, 0)
+	// Dopasuj dystans dla mobile/desktop i zaktualizuj kontroler
+	applyMainCameraDistance(true)
+	controls.update()
 }
 
 // Ustal, czy wszystkie wymagane pola (bez centrów i buforów) mają literki
 function areAllRequiredLogicalFilled() {
-    const needed = new Set()
-    for (let pos = 0; pos < 54; pos++) {
-        const physId = posToId[pos]
-        const logical = canonicalLogicalId(physicalIdToLogicalId(physId))
-        if (CENTER_IDS.has(logical)) continue
-        if (DISABLED_LOGICAL.has(logical)) continue
-        needed.add(logical)
-    }
-    for (const key of needed) {
-        if (!labels[key] || String(labels[key]).trim() === '') return false
-    }
-    return true
+	const needed = new Set()
+	for (let pos = 0; pos < 54; pos++) {
+		const physId = posToId[pos]
+		const logical = canonicalLogicalId(physicalIdToLogicalId(physId))
+		if (CENTER_IDS.has(logical)) continue
+		if (DISABLED_LOGICAL.has(logical)) continue
+		needed.add(logical)
+	}
+	for (const key of needed) {
+		if (!labels[key] || String(labels[key]).trim() === '') return false
+	}
+	return true
 }
 
 function setLettersToggleByProgress() {
-    if (!toggle) return
-    toggle.checked = areAllRequiredLogicalFilled()
-    updateLabelsVisibility()
+	if (!toggle) return
+	toggle.checked = areAllRequiredLogicalFilled()
+	updateLabelsVisibility()
 }
 
 // Hamburger menu (mobile): toggles #ui visibility
@@ -173,6 +256,9 @@ const topChoices = document.getElementById('topChoices')
 const orientationNextBtn = document.getElementById('orientationNextBtn')
 const orientationBackBtn = document.getElementById('orientationBackBtn')
 const orientationSaveBtn = document.getElementById('orientationSaveBtn')
+// Summary UI elements in main panel
+const summaryTopSwatch = document.getElementById('summaryTopSwatch')
+const summaryFrontSwatch = document.getElementById('summaryFrontSwatch')
 
 const COLOR_HEX = {
 	white: 0xffffff,
@@ -194,6 +280,26 @@ const OPPOSITE = { white: 'yellow', yellow: 'white', green: 'blue', blue: 'green
 
 let selectedFront = null
 let selectedTop = null
+
+function updateOrientationSummaryUI(sel) {
+	const setSwatch = (el, colorKey) => {
+		if (!el) return
+		if (colorKey && COLOR_HEX[colorKey]) {
+			const hex = COLOR_HEX[colorKey]
+			el.style.background = `#${hex.toString(16).padStart(6, '0')}`
+			el.title = COLOR_LABEL[colorKey] || ''
+			el.classList.remove('empty')
+		} else {
+			el.style.background = 'transparent'
+			el.title = ''
+			el.classList.add('empty')
+		}
+	}
+	const topKey = sel && sel.top ? sel.top : null
+	const frontKey = sel && sel.front ? sel.front : null
+	setSwatch(summaryTopSwatch, topKey)
+	setSwatch(summaryFrontSwatch, frontKey)
+}
 
 function buildColorGrid(container, colors) {
 	container.innerHTML = ''
@@ -244,12 +350,12 @@ function resetOrientationWizardState() {
 	selectedTop = null
 	if (stepTop) stepTop.hidden = false
 	if (stepFront) stepFront.hidden = true
-	if (topChoices) buildColorGrid(topChoices, ['white','yellow','green','blue','red','orange'])
+	if (topChoices) buildColorGrid(topChoices, ['white', 'yellow', 'green', 'blue', 'red', 'orange'])
 	if (frontChoices) frontChoices.innerHTML = ''
 	const grids = [frontChoices, topChoices]
 	grids.forEach(container => {
 		if (!container) return
-		container.querySelectorAll('.color-swatch').forEach(sw => sw.setAttribute('aria-checked','false'))
+		container.querySelectorAll('.color-swatch').forEach(sw => sw.setAttribute('aria-checked', 'false'))
 	})
 	if (orientationSaveBtn) orientationSaveBtn.disabled = true
 	if (orientationNextBtn) orientationNextBtn.disabled = true
@@ -259,7 +365,7 @@ function initOrientation() {
 	// If overlay missing, skip
 	if (!orientationOverlay || !frontChoices || !topChoices) return
 	// Build top step grid
-	buildColorGrid(topChoices, ['white','yellow','green','blue','red','orange'])
+	buildColorGrid(topChoices, ['white', 'yellow', 'green', 'blue', 'red', 'orange'])
 
 	// listeners
 	topChoices.addEventListener('click', e => {
@@ -278,7 +384,7 @@ function initOrientation() {
 	})
 	if (orientationNextBtn) {
 		orientationNextBtn.addEventListener('click', () => {
-			const all = ['white','yellow','green','blue','red','orange']
+			const all = ['white', 'yellow', 'green', 'blue', 'red', 'orange']
 			const invalid = new Set([selectedTop, OPPOSITE[selectedTop]])
 			const allowed = all.filter(c => !invalid.has(c))
 			buildColorGrid(frontChoices, allowed)
@@ -295,21 +401,22 @@ function initOrientation() {
 			if (orientationNextBtn) orientationNextBtn.disabled = !selectedTop
 		})
 	}
-  if (orientationSaveBtn) {
-    orientationSaveBtn.addEventListener('click', () => {
-      const data = { front: selectedFront, top: selectedTop }
-      try {
-        localStorage.setItem(ORIENTATION_KEY, JSON.stringify(data))
-      } catch {}
-      applyOrientationFromSelection(data)
-      // Po zatwierdzeniu wyboru przywróć widok kamery do pozycji bazowej
-      resetCameraView()
-      // Po zatwierdzeniu: odznacz "Pokaż literki" i ukryj kropki tylko dla liter
-      if (toggle) toggle.checked = false
-      updateLabelsVisibility()
-      closeOrientationOverlay()
-    })
-  }
+	if (orientationSaveBtn) {
+		orientationSaveBtn.addEventListener('click', () => {
+			const data = { front: selectedFront, top: selectedTop }
+			try {
+				localStorage.setItem(ORIENTATION_KEY, JSON.stringify(data))
+			} catch {}
+			applyOrientationFromSelection(data)
+			updateOrientationSummaryUI(data)
+			// Po zatwierdzeniu wyboru przywróć widok kamery do pozycji bazowej
+			resetCameraView()
+			// Po zatwierdzeniu: odznacz "Pokaż literki" i ukryj kropki tylko dla liter
+			if (toggle) toggle.checked = false
+			updateLabelsVisibility()
+			closeOrientationOverlay()
+		})
+	}
 
 	// first-run: show overlay only if not saved
 	let saved = null
@@ -322,19 +429,20 @@ function initOrientation() {
 		openOrientationOverlay()
 	} else {
 		applyOrientationFromSelection(saved)
+		updateOrientationSummaryUI(saved)
 	}
 
-  updateSaveEnabled()
-  refreshDisabledByLogic()
-  refreshAllLabelTexts()
-  // Ustaw checkbox wg progressu na starcie
-  setLettersToggleByProgress()
-  // Ukryj checkbox w trybie edycji na starcie
-  {
-    const labelEl = toggle ? toggle.closest('label') : null
-    const modeEl = document.getElementById('mode')
-    if (labelEl) labelEl.style.display = modeEl && modeEl.value === 'quiz' ? 'inline-flex' : 'none'
-  }
+	updateSaveEnabled()
+	refreshDisabledByLogic()
+	refreshAllLabelTexts()
+	// Ustaw checkbox wg progressu na starcie
+	setLettersToggleByProgress()
+	// Ukryj checkbox w trybie edycji na starcie
+	{
+		const labelEl = toggle ? toggle.closest('label') : null
+		const modeEl = document.getElementById('mode')
+		if (labelEl) labelEl.style.display = modeEl && modeEl.value === 'quiz' ? 'inline-flex' : 'none'
+	}
 }
 
 initTheme()
@@ -384,12 +492,12 @@ const STORAGE_KEY = 'rubik_labels_v1'
 const LABELS_VERSION_KEY = 'rubik_labels_version'
 // Mapowanie fizyczny↔logiczny (w referencji są tożsame; zostawiamy funkcje dla czytelności)
 function physicalIdToLogicalId(physId) {
-    // Logiczne ID w aktualnej orientacji: stary (fizyczny) -> zorientowany (logiczny)
-    return toOrientedId(physId)
+	// Logiczne ID w aktualnej orientacji: stary (fizyczny) -> zorientowany (logiczny)
+	return toOrientedId(physId)
 }
 function logicalIdToPhysicalId(logId) {
-    // Odwrócenie: logiczny (zorientowany) -> fizyczny (referencyjny)
-    return toPhysicalId(logId)
+	// Odwrócenie: logiczny (zorientowany) -> fizyczny (referencyjny)
+	return toPhysicalId(logId)
 }
 function loadLabels() {
 	let obj = {}
@@ -558,67 +666,74 @@ function deriveFaceMapFromQuaternion(q) {
 	for (const [face, n] of Object.entries(dirs)) {
 		// n is original normal; after q, where does it point?
 		const t = n.clone().applyQuaternion(q)
-    const o = axisFace(t)
-    oldToOriented[face] = o
-  }
-  const orientedToOld = invertFaceMap(oldToOriented)
-  // compute per-face rotation of indices (0,1,2,3) CW so that old face grid aligns to canonical grid of the oriented face
-  const axisEquals = (a, b) => a.clone().normalize().dot(b.clone().normalize()) > 0.98
-  for (const oldFace of ['U','D','F','B','R','L']) {
-    const newFace = oldToOriented[oldFace]
-    // old face basis in world after applying q (how the physical face sits now)
-    const uOld = faces.find(f => f.name === oldFace).u.clone().applyQuaternion(q)
-    const vOld = faces.find(f => f.name === oldFace).v.clone().applyQuaternion(q)
-    // target canonical basis for the oriented face in world (no q!)
-    const uCan = faces.find(f => f.name === newFace).u.clone()
-    const vCan = faces.find(f => f.name === newFace).v.clone()
-    let rot = 0
-    if (axisEquals(uOld, uCan) && axisEquals(vOld, vCan)) rot = 0
-    else if (axisEquals(uOld, vCan) && axisEquals(vOld, uCan.clone().negate())) rot = 1
-    else if (axisEquals(uOld, uCan.clone().negate()) && axisEquals(vOld, vCan.clone().negate())) rot = 2
-    else if (axisEquals(uOld, vCan.clone().negate()) && axisEquals(vOld, uCan)) rot = 3
-    else rot = 0
-    faceRotationSteps[oldFace] = rot
-  }
-  return { oldToOriented, orientedToOld }
+		const o = axisFace(t)
+		oldToOriented[face] = o
+	}
+	const orientedToOld = invertFaceMap(oldToOriented)
+	// compute per-face rotation of indices (0,1,2,3) CW so that old face grid aligns to canonical grid of the oriented face
+	const axisEquals = (a, b) => a.clone().normalize().dot(b.clone().normalize()) > 0.98
+	for (const oldFace of ['U', 'D', 'F', 'B', 'R', 'L']) {
+		const newFace = oldToOriented[oldFace]
+		// old face basis in world after applying q (how the physical face sits now)
+		const uOld = faces
+			.find(f => f.name === oldFace)
+			.u.clone()
+			.applyQuaternion(q)
+		const vOld = faces
+			.find(f => f.name === oldFace)
+			.v.clone()
+			.applyQuaternion(q)
+		// target canonical basis for the oriented face in world (no q!)
+		const uCan = faces.find(f => f.name === newFace).u.clone()
+		const vCan = faces.find(f => f.name === newFace).v.clone()
+		let rot = 0
+		if (axisEquals(uOld, uCan) && axisEquals(vOld, vCan)) rot = 0
+		else if (axisEquals(uOld, vCan) && axisEquals(vOld, uCan.clone().negate())) rot = 1
+		else if (axisEquals(uOld, uCan.clone().negate()) && axisEquals(vOld, vCan.clone().negate())) rot = 2
+		else if (axisEquals(uOld, vCan.clone().negate()) && axisEquals(vOld, uCan)) rot = 3
+		else rot = 0
+		faceRotationSteps[oldFace] = rot
+	}
+	return { oldToOriented, orientedToOld }
 }
 
 function rotateIndexCW(idx, steps) {
-  steps = ((steps % 4) + 4) % 4
-  const r = Math.floor(idx / 3)
-  const c = idx % 3
-  let nr = r, nc = c
-  if (steps === 1) {
-    nr = c
-    nc = 2 - r
-  } else if (steps === 2) {
-    nr = 2 - r
-    nc = 2 - c
-  } else if (steps === 3) {
-    nr = 2 - c
-    nc = r
-  }
-  return nr * 3 + nc
+	steps = ((steps % 4) + 4) % 4
+	const r = Math.floor(idx / 3)
+	const c = idx % 3
+	let nr = r,
+		nc = c
+	if (steps === 1) {
+		nr = c
+		nc = 2 - r
+	} else if (steps === 2) {
+		nr = 2 - r
+		nc = 2 - c
+	} else if (steps === 3) {
+		nr = 2 - c
+		nc = r
+	}
+	return nr * 3 + nc
 }
 
 function toOrientedId(physId) {
-  if (!physId || typeof physId !== 'string') return physId
-  const f = physId[0]
-  const idx = Number(physId.slice(1))
-  const nf = currentOldToOriented[f] || f
-  const steps = faceRotationSteps[f] || 0
-  const nidx = rotateIndexCW(idx, steps)
-  return nf + String(nidx)
+	if (!physId || typeof physId !== 'string') return physId
+	const f = physId[0]
+	const idx = Number(physId.slice(1))
+	const nf = currentOldToOriented[f] || f
+	const steps = faceRotationSteps[f] || 0
+	const nidx = rotateIndexCW(idx, steps)
+	return nf + String(nidx)
 }
 function toPhysicalId(orientedId) {
-  if (!orientedId || typeof orientedId !== 'string') return orientedId
-  const f = orientedId[0]
-  const idx = Number(orientedId.slice(1))
-  const of = currentOrientedToOld[f] || f
-  const steps = faceRotationSteps[of] || 0
-  const back = (4 - (steps % 4)) % 4
-  const pidx = rotateIndexCW(idx, back)
-  return of + String(pidx)
+	if (!orientedId || typeof orientedId !== 'string') return orientedId
+	const f = orientedId[0]
+	const idx = Number(orientedId.slice(1))
+	const of = currentOrientedToOld[f] || f
+	const steps = faceRotationSteps[of] || 0
+	const back = (4 - (steps % 4)) % 4
+	const pidx = rotateIndexCW(idx, back)
+	return of + String(pidx)
 }
 
 function applyOrientationFromSelection(sel) {
@@ -628,14 +743,14 @@ function applyOrientationFromSelection(sel) {
 	if (!frontFace || !topFace) return
 	const q = computeOrientationQuaternion(frontFace, topFace)
 	cubeGroup.quaternion.copy(q)
-  const maps = deriveFaceMapFromQuaternion(q)
-  currentOldToOriented = maps.oldToOriented
-  currentOrientedToOld = maps.orientedToOld
-  // po zmianie orientacji odśwież blokady, teksty, kolory i widoczność etykiet
-  refreshDisabledByLogic()
-  refreshAllLabelTexts()
-  repaintByState()
-  updateLabelsVisibility()
+	const maps = deriveFaceMapFromQuaternion(q)
+	currentOldToOriented = maps.oldToOriented
+	currentOrientedToOld = maps.orientedToOld
+	// po zmianie orientacji odśwież blokady, teksty, kolory i widoczność etykiet
+	refreshDisabledByLogic()
+	refreshAllLabelTexts()
+	repaintByState()
+	updateLabelsVisibility()
 }
 // ======== Cubie model (rogi + krawędzie) ========
 const FACE_ORDER = ['U', 'R', 'F', 'D', 'L', 'B']
@@ -822,25 +937,25 @@ function updateLabelColorByCubie() {
 }
 
 function canonicalLogicalId(logId) {
-  if (logId === 'R1') return 'U5'
-  if (logId === 'B2' || logId === 'L0') return 'U0'
-  return logId
+	if (logId === 'R1') return 'U5'
+	if (logId === 'B2' || logId === 'L0') return 'U0'
+	return logId
 }
 
 function refreshAllLabelTexts() {
-  labelMap.forEach((lbl, physId) => {
-    const logical = physicalIdToLogicalId(physId)
-    const canon = canonicalLogicalId(logical)
-    lbl.element.textContent = labels[canon] || ''
-  })
+	labelMap.forEach((lbl, physId) => {
+		const logical = physicalIdToLogicalId(physId)
+		const canon = canonicalLogicalId(logical)
+		lbl.element.textContent = labels[canon] || ''
+	})
 }
 
 function refreshDisabledByLogic() {
-  stickerMeshes.forEach(tile => {
-    const physId = tile.userData.id
-    const logical = physicalIdToLogicalId(physId)
-    tile.userData.disabled = tile.userData.center || DISABLED_LOGICAL.has(logical)
-  })
+	stickerMeshes.forEach(tile => {
+		const physId = tile.userData.id
+		const logical = physicalIdToLogicalId(physId)
+		tile.userData.disabled = tile.userData.center || DISABLED_LOGICAL.has(logical)
+	})
 }
 
 // ======= Litery powiązane z faceletami (podążają za elementami) =======
@@ -892,14 +1007,14 @@ function buildFaceletMappingFromCubie() {
 }
 
 function updateLabelTextsByCubie() {
-    const mapping = buildFaceletMappingFromCubie()
-    for (let pos = 0; pos < 54; pos++) {
-        const id = posToId[pos]
-        const lblObj = labelMap.get(id)
-        if (!lblObj) continue
-        const logical = physicalIdToLogicalId(id)
-        lblObj.element.textContent = labels[logical] || ''
-    }
+	const mapping = buildFaceletMappingFromCubie()
+	for (let pos = 0; pos < 54; pos++) {
+		const id = posToId[pos]
+		const lblObj = labelMap.get(id)
+		if (!lblObj) continue
+		const logical = physicalIdToLogicalId(id)
+		lblObj.element.textContent = labels[logical] || ''
+	}
 }
 // Inicjalizacja: wczytaj litery z labels (id->litera) do faceletLabels,
 // następnie ustaw stan cubie na ułożony i odmaluj kolory oraz etykiety.
@@ -1063,6 +1178,43 @@ function showToast(msg, ms = 1200) {
 	clearTimeout(showToast._t)
 	showToast._t = setTimeout(() => (toast.style.display = 'none'), ms)
 }
+// Modal potwierdzenia resetu (Promise<boolean>)
+function openResetModal() {
+  const modal = document.getElementById('resetModal')
+  const confirmBtn = document.getElementById('resetConfirm')
+  const cancelBtn = document.getElementById('resetCancel')
+  if (!modal || !confirmBtn || !cancelBtn) return Promise.resolve(false)
+  modal.classList.add('open')
+  modal.setAttribute('aria-hidden', 'false')
+  return new Promise(resolve => {
+    let done = false
+    const finish = val => {
+      if (done) return
+      done = true
+      modal.classList.remove('open')
+      modal.setAttribute('aria-hidden', 'true')
+      confirmBtn.removeEventListener('click', onConfirm)
+      cancelBtn.removeEventListener('click', onCancel)
+      modal.removeEventListener('click', onBackdrop)
+      window.removeEventListener('keydown', onKey)
+      resolve(val)
+    }
+    const onConfirm = () => finish(true)
+    const onCancel = () => finish(false)
+    const onBackdrop = e => {
+      if (e.target === modal) onCancel()
+    }
+    const onKey = e => {
+      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Enter') onConfirm()
+    }
+    confirmBtn.addEventListener('click', onConfirm)
+    cancelBtn.addEventListener('click', onCancel)
+    modal.addEventListener('click', onBackdrop)
+    window.addEventListener('keydown', onKey)
+    setTimeout(() => cancelBtn.focus(), 0)
+  })
+}
 function handleMove(ev) {
 	const hit = pick(ev)
 	if (hit !== lastHover) {
@@ -1084,13 +1236,13 @@ async function handleClick(ev) {
 			showToast(tile.userData.center ? 'Nie można ustawić litery na środku.' : 'To pole jest buforem.')
 			return
 		}
-    const current = labels[canonicalLogicalId(logicalId)] || ''
-    const val = await openLetterModal(canonicalLogicalId(logicalId), current)
+		const current = labels[canonicalLogicalId(logicalId)] || ''
+		const val = await openLetterModal(canonicalLogicalId(logicalId), current)
 		if (val === null) return
 		const clean = (val || '').trim().toUpperCase()
-    const key = canonicalLogicalId(logicalId)
-    if (clean) labels[key] = clean
-    else delete labels[key]
+		const key = canonicalLogicalId(logicalId)
+		if (clean) labels[key] = clean
+		else delete labels[key]
 		// odśwież UI pozycyjnie
 		const lbl = labelMap.get(physId)
 		if (lbl) lbl.element.textContent = clean
@@ -1103,12 +1255,12 @@ async function handleClick(ev) {
 			return
 		}
 		// Sprawdź literę przypisaną do pozycji (id)
-    const target = (labels[canonicalLogicalId(logicalId)] || '').toUpperCase()
+		const target = (labels[canonicalLogicalId(logicalId)] || '').toUpperCase()
 		if (!target) {
 			showToast(`Dla ${logicalId} nie ustawiono litery.`)
 			return
 		}
-    const guessRaw = await openLetterModal(canonicalLogicalId(logicalId), '')
+		const guessRaw = await openLetterModal(canonicalLogicalId(logicalId), '')
 		if (guessRaw === null) return
 		const guess = (guessRaw || '').trim().toUpperCase()
 		showToast(guess === target ? '✅ Dobrze!' : `❌ Nie. Poprawna: ${target}`, 2000)
@@ -1123,8 +1275,8 @@ const _toCam = new THREE.Vector3()
 
 function updateLabelsVisibility() {
 	const showLetters = toggle.checked
-    const modeEl = document.getElementById('mode')
-    const modeVal = modeEl ? modeEl.value : 'edit'
+	const modeEl = document.getElementById('mode')
+	const modeVal = modeEl ? modeEl.value : 'edit'
 	for (const tile of stickerMeshes) {
 		const id = tile.userData.id
 		const lbl = labelMap.get(id)
@@ -1178,8 +1330,10 @@ if (modeSelect) {
 }
 
 // Reset / eksport / import
-document.getElementById('reset').addEventListener('click', () => {
-	if (!confirm('Na pewno usunąć wszystkie literki?')) return
+
+document.getElementById('reset').addEventListener('click', async () => {
+	const ok = await openResetModal()
+	if (!ok) return
 	labels = {}
 	saveLabels(labels)
 	labelMap.forEach(lbl => (lbl.element.textContent = ''))
@@ -1489,7 +1643,7 @@ function startPieceTrainer(kind) {
 	}
 	function pick() {
 		const all = pool()
-    const ready = all.filter(ids => ids.every(id => !!labels[canonicalLogicalId(physicalIdToLogicalId(id))]))
+		const ready = all.filter(ids => ids.every(id => !!labels[canonicalLogicalId(physicalIdToLogicalId(id))]))
 		let src = ready.length ? ready : all
 		// unikaj powtórki tego samego elementu, jeśli mamy więcej niż jedną opcję
 		if (src.length > 1 && lastIdsKey) {
@@ -1583,8 +1737,8 @@ function startPieceTrainer(kind) {
 		rows.forEach(inp => inp.classList.remove('wrong'))
 		for (const inp of rows) {
 			const id = inp.dataset.id
-    const logical = physicalIdToLogicalId(id)
-    const expected = (labels[canonicalLogicalId(logical)] || '').toUpperCase()
+			const logical = physicalIdToLogicalId(id)
+			const expected = (labels[canonicalLogicalId(logical)] || '').toUpperCase()
 			const guess = (inp.value || '').trim().toUpperCase()
 			if (guess === expected && expected) ok++
 			else inp.classList.add('wrong')

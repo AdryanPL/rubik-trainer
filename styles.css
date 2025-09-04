@@ -4,6 +4,11 @@ body {
 	margin: 0;
 }
 
+/* Helpers */
+.hidden {
+	display: none !important;
+}
+
 /* Hamburger button (mobile) */
 #menuToggle {
 	position: fixed;
@@ -22,6 +27,28 @@ body {
 	cursor: pointer;
 }
 #menuToggle:hover {
+	background: #0f172a;
+}
+/* Back button (cube view) */
+#backToHome {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	z-index: 35;
+	width: 40px;
+	height: 40px;
+	border-radius: 999px;
+	border: 1px solid #374151;
+	background: #111827;
+	color: #e5e7eb;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+#backToHome:hover {
 	background: #0f172a;
 }
 body {
@@ -279,6 +306,24 @@ body[data-theme='light'] {
 #letterModal .toolbar button:hover,
 #resetModal .toolbar button:hover {
 	background: #0f172a;
+}
+
+/* Destructive action highlight for reset confirmation */
+#resetModal .toolbar button#resetConfirm,
+#resetModal .toolbar #resetConfirm {
+	background: #df4d4d; /* red-700 */
+	color: #f9fafb;
+}
+#resetModal .toolbar button#resetConfirm:hover,
+#resetModal .toolbar #resetConfirm:hover {
+	background: #c13434; /* red-800 */
+}
+
+/* Shared modal description text */
+.modal-desc {
+	margin: 0;
+	font-size: 13px;
+	color: #d1d5db;
 }
 
 @keyframes letter-pop {
