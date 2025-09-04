@@ -99,6 +99,61 @@ function migrateIfNeeded() {
 // Call migration early (before the rest of UI initialization uses old keys)
 migrateIfNeeded()
 
+// ======= Home view: profiles list rendering =======
+function openActiveProfile() {
+  // Placeholder: next tasks will load labels/orientation into scene
+  try { console.info('openActiveProfile(): not implemented yet – showing cube for now') } catch {}
+  showCube()
+}
+
+function renderProfilesList() {
+  const list = document.getElementById('profilesList'); const arr = loadProfiles(); if (!list) return; list.innerHTML = ''
+  arr.sort((a, b) => b.updatedAt - a.updatedAt)
+  arr.forEach(p => {
+    const card = document.createElement('div'); card.className = 'profile-card'
+    card.innerHTML = `
+      <div class="profile-title">${p.name}</div>
+      <div class="profile-meta">${new Date(p.updatedAt).toLocaleString()}</div>
+      <div class="profile-actions">
+        <button data-act="load">Wczytaj</button>
+        <button data-act="rename">Zmień nazwę</button>
+        <button data-act="delete">Usuń</button>
+      </div>`
+    card.querySelector('[data-act="load"]').onclick = () => { setActiveProfileId(p.id); openActiveProfile() }
+    card.querySelector('[data-act="rename"]').onclick = () => { const nn = prompt('Nowa nazwa', p.name); if (nn && nn.trim()) { updateProfile(p.id, { name: nn.trim() }); renderProfilesList() } }
+    card.querySelector('[data-act="delete"]').onclick = () => { if (confirm('Usunąć profil?')) { deleteProfile(p.id); renderProfilesList() } }
+    list.appendChild(card)
+  })
+}
+
+// Hook: open profiles button shows list
+const openProfilesBtn = document.getElementById('openProfilesBtn')
+if (openProfilesBtn) openProfilesBtn.onclick = renderProfilesList
+
+// New Profile flow: ask name, then reuse orientation overlay, create profile
+const newProfileBtn = document.getElementById('newProfileBtn')
+if (newProfileBtn) newProfileBtn.onclick = () => {
+  const raw = prompt('Nazwa profilu:')
+  const name = raw && raw.trim()
+  if (!name) return
+  // Show cube view to ensure overlay is visible (overlay lives inside cubeView)
+  showCube()
+  // Reset and open orientation wizard
+  resetOrientationWizardState()
+  openOrientationOverlay()
+  // On save, create profile with chosen orientation and open it
+  const onSave = () => {
+    const top = selectedTop
+    const front = selectedFront
+    if (top && front) {
+      createProfile({ name, orientation: { top, front } })
+      openActiveProfile()
+    }
+    orientationSaveBtn && orientationSaveBtn.removeEventListener('click', onSave)
+  }
+  if (orientationSaveBtn) orientationSaveBtn.addEventListener('click', onSave, { once: true })
+}
+
 // Back button to return to home view
 const backToHomeBtn = document.getElementById('backToHome')
 if (backToHomeBtn) backToHomeBtn.onclick = () => {
