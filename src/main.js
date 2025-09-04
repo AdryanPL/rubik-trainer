@@ -101,9 +101,24 @@ migrateIfNeeded()
 
 // ======= Home view: profiles list rendering =======
 function openActiveProfile() {
-  // Placeholder: next tasks will load labels/orientation into scene
-  try { console.info('openActiveProfile(): not implemented yet – showing cube for now') } catch {}
+  const prof = getActiveProfile()
+  if (!prof) { showHome(); return }
+  // 1) Załaduj orientację
+  if (prof.orientation) {
+    applyOrientationFromSelection(prof.orientation)
+    try { updateOrientationSummaryUI(prof.orientation) } catch {}
+  }
+  // 2) Załaduj literki
+  try { labels = { ...(prof.labels || {}) } } catch {}
+  try { refreshAllLabelTexts() } catch {}
+  try { repaintByState() } catch {}
+  try { updateLabelsVisibility() } catch {}
+  // Zamknij ewentualny kreator orientacji, jeśli otwarty
+  try { if (typeof closeOrientationOverlay === 'function') closeOrientationOverlay() } catch {}
+  // 3) Pokaż widok kostki
   showCube()
+  // 4) Ustaw checkbox wg progresu (jeśli funkcja istnieje)
+  try { if (typeof setLettersToggleByProgress === 'function') setLettersToggleByProgress() } catch {}
 }
 
 function renderProfilesList() {
@@ -579,11 +594,12 @@ function loadLabels() {
 	} catch {}
 	return migrated
 }
+// Persist labels to active profile (legacy alias)
 function saveLabels(obj) {
-	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
-		localStorage.setItem(LABELS_VERSION_KEY, '2')
-	} catch {}
+    try {
+        const ap = getActiveProfile()
+        if (ap) updateProfile(ap.id, { labels: obj })
+    } catch {}
 }
 let labels = loadLabels()
 
@@ -1301,7 +1317,8 @@ async function handleClick(ev) {
 		// odśwież UI pozycyjnie
 		const lbl = labelMap.get(physId)
 		if (lbl) lbl.element.textContent = clean
-		saveLabels(labels)
+        saveLabels(labels)
+        { const ap = getActiveProfile(); if (ap) updateProfile(ap.id, { labels }) }
 		updateLabelsVisibility()
 	} else {
 		// W trybie quiz: zablokuj bufory i środki tak jak w edycji
@@ -1390,7 +1407,8 @@ document.getElementById('reset').addEventListener('click', async () => {
 	const ok = await openResetModal()
 	if (!ok) return
 	labels = {}
-	saveLabels(labels)
+    saveLabels(labels)
+    { const ap = getActiveProfile(); if (ap) updateProfile(ap.id, { labels }) }
 	labelMap.forEach(lbl => (lbl.element.textContent = ''))
 	if (toggle) toggle.checked = false
 	updateLabelsVisibility()
@@ -1427,7 +1445,8 @@ document.getElementById('import').addEventListener('click', () => {
 					if (!CENTER_IDS.has(canon)) rewritten[canon] = v
 				}
 				labels = rewritten
-				saveLabels(labels)
+                saveLabels(labels)
+                { const ap = getActiveProfile(); if (ap) updateProfile(ap.id, { labels }) }
 				// Odśwież etykiety wg LOGICZNEGO ID i ustaw checkbox wg progressu
 				refreshAllLabelTexts()
 				setLettersToggleByProgress()
@@ -1469,6 +1488,12 @@ tick()
 
 // Zastosuj orientację (jeśli ustawiona) i ewentualnie pokaż kreator przy pierwszym uruchomieniu
 initOrientation()
+
+// Start routing: if there is an active profile, open it; otherwise show home
+try {
+  if (getActiveProfile()) openActiveProfile()
+  else showHome()
+} catch {}
 
 // ================== Mini‑scena: trening pojedynczego elementu (tylko tryb na miejscu) ==================
 // DOM elementy (przyciski uruchamiające trener na miejscu)
