@@ -19,6 +19,11 @@ body {
 	margin: 8px 0;
 	display: grid;
 	gap: 8px;
+	transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+}
+.profile-card:hover {
+	border-color: rgba(255, 255, 255, 0.14);
+	background: rgba(17, 24, 39, 0.82);
 }
 .profile-title {
 	font-size: 15px;
@@ -44,6 +49,57 @@ body {
 }
 .profile-actions button:hover {
 	background: #0f172a;
+}
+
+/* ===== Home view (hero) ===== */
+#homeView {
+	display: block;
+}
+.home-hero {
+	min-height: 75vh;
+	display: grid;
+	place-items: center;
+	text-align: center;
+	gap: 18px;
+}
+.home-title {
+	font-size: clamp(22px, 4vw, 34px);
+	font-weight: 700;
+	color: #f3f4f6;
+	margin: 0;
+}
+.home-actions {
+	display: flex;
+	gap: 12px;
+	justify-content: center;
+	flex-wrap: wrap;
+}
+.btn {
+	background: #111827;
+	color: #e5e7eb;
+	border: 1px solid #374151;
+	border-radius: 12px;
+	padding: 10px 14px;
+	font-size: 14px;
+	cursor: pointer;
+}
+.btn:hover { background: #0f172a; }
+.btn-secondary { background: #0e1726; }
+.btn-lg { padding: 12px 16px; font-size: 15px; }
+.btn-icon { width: 40px; height: 40px; border-radius: 999px; padding: 0; display: inline-grid; place-items: center; }
+
+/* Profiles view header */
+.profiles-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 10px 0 6px;
+}
+.profiles-title {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 600;
+	color: #e5e7eb;
 }
 
 /* Hamburger button (mobile) */

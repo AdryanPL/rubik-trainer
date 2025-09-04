@@ -19,10 +19,20 @@
 	<body>
 		<!-- Widok główny (menu startowe) -->
 		<div id="homeView">
-			<h1>Aplikacja do nauki blindfold 3x3</h1>
-			<div class="row">
-				<button id="newProfileBtn">Nowa kostka</button>
-				<button id="openProfilesBtn">Wczytaj kostkę</button>
+			<div class="home-hero">
+				<h1 class="home-title">Aplikacja do nauki blindfold 3x3</h1>
+				<div class="home-actions">
+					<button id="newProfileBtn" class="btn btn-lg">Nowa kostka</button>
+					<button id="openProfilesBtn" class="btn btn-lg btn-secondary">Wczytaj kostkę</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Widok listy profili -->
+		<div id="profilesView" class="hidden">
+			<div class="profiles-header">
+				<button id="backToHomeFromProfiles" class="btn btn-icon" aria-label="Powrót">←</button>
+				<h2 class="profiles-title">Twoje kostki</h2>
 			</div>
 			<div id="profilesList"></div>
 		</div>

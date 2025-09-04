@@ -7,6 +7,7 @@ const app = document.getElementById('app')
 // View containers
 const homeView = document.getElementById('homeView')
 const cubeView = document.getElementById('cubeView')
+const profilesView = document.getElementById('profilesView')
 const scene = new THREE.Scene()
 scene.background = new THREE.Color(0x0b0f14)
 
@@ -27,13 +28,27 @@ labelRenderer.domElement.style.zIndex = '5'
 ;(cubeView || document.body).appendChild(labelRenderer.domElement)
 
 // Simple view switching
+const LAST_VIEW_KEY = 'RUBIK_LAST_VIEW'
 function showHome() {
   if (homeView) homeView.classList.remove('hidden')
   if (cubeView) cubeView.classList.add('hidden')
+  if (profilesView) profilesView.classList.add('hidden')
+  try { sessionStorage.setItem(LAST_VIEW_KEY, 'home') } catch {}
+  // Ensure profiles list is fresh when returning home
+  try { renderProfilesList() } catch {}
 }
 function showCube() {
   if (homeView) homeView.classList.add('hidden')
   if (cubeView) cubeView.classList.remove('hidden')
+  if (profilesView) profilesView.classList.add('hidden')
+  try { sessionStorage.setItem(LAST_VIEW_KEY, 'cube') } catch {}
+}
+function showProfiles() {
+  if (homeView) homeView.classList.add('hidden')
+  if (cubeView) cubeView.classList.add('hidden')
+  if (profilesView) profilesView.classList.remove('hidden')
+  try { renderProfilesList() } catch {}
+  // last view remains 'home' to avoid auto-opening profile after refresh
 }
 // Expose for manual testing in console
 try {
@@ -120,6 +135,24 @@ function openActiveProfile() {
   try { updateToggleVisibilityByMode() } catch {}
 }
 
+// Reset scene/UI to a neutral state (no active profile)
+function resetScene() {
+  try { stopPieceTrainer() } catch {}
+  // Clear labels and UI
+  labels = {}
+  try { refreshAllLabelTexts() } catch {}
+  if (toggle) toggle.checked = false
+  try { updateLabelsVisibility() } catch {}
+  // Reset orientation mapping
+  try { cubeGroup.quaternion.identity() } catch {}
+  currentOldToOriented = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
+  currentOrientedToOld = { U: 'U', D: 'D', F: 'F', B: 'B', R: 'R', L: 'L' }
+  faceRotationSteps = { U: 0, D: 0, F: 0, B: 0, R: 0, L: 0 }
+  try { refreshDisabledByLogic(); repaintByState() } catch {}
+  try { resetCameraView() } catch {}
+  try { updateOrientationSummaryUI(null) } catch {}
+}
+
 function renderProfilesList() {
   const list = document.getElementById('profilesList'); const arr = loadProfiles(); if (!list) return; list.innerHTML = ''
   arr.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -135,7 +168,14 @@ function renderProfilesList() {
       </div>`
     card.querySelector('[data-act="load"]').onclick = () => { setActiveProfileId(p.id); openActiveProfile() }
     card.querySelector('[data-act="rename"]').onclick = () => { const nn = prompt('Nowa nazwa', p.name); if (nn && nn.trim()) { updateProfile(p.id, { name: nn.trim() }); renderProfilesList() } }
-    card.querySelector('[data-act="delete"]').onclick = () => { if (confirm('Usunąć profil?')) { deleteProfile(p.id); renderProfilesList() } }
+    card.querySelector('[data-act="delete"]').onclick = () => {
+      if (confirm('Usunąć profil?')) {
+        const wasActive = getActiveProfileId() === p.id
+        deleteProfile(p.id)
+        renderProfilesList()
+        if (wasActive) { resetScene(); showHome() }
+      }
+    }
     list.appendChild(card)
   })
 }
@@ -509,8 +549,6 @@ const DOT_BLOCKED = new Set(DISABLED_LOGICAL)
 const CENTER_IDS = new Set(['U4', 'D4', 'F4', 'B4', 'R4', 'L4'])
 
 // ======= Persistencja =======
-const STORAGE_KEY = 'rubik_labels_v1'
-const LABELS_VERSION_KEY = 'rubik_labels_version'
 // Mapowanie fizyczny↔logiczny (w referencji są tożsame; zostawiamy funkcje dla czytelności)
 function physicalIdToLogicalId(physId) {
 	// Logiczne ID w aktualnej orientacji: stary (fizyczny) -> zorientowany (logiczny)
@@ -520,31 +558,7 @@ function logicalIdToPhysicalId(logId) {
 	// Odwrócenie: logiczny (zorientowany) -> fizyczny (referencyjny)
 	return toPhysicalId(logId)
 }
-function loadLabels() {
-	let obj = {}
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY)
-		obj = raw ? JSON.parse(raw) : {}
-	} catch {
-		obj = {}
-	}
-	// Migracja do ID logicznych (v2)
-	let ver = 1
-	try {
-		ver = parseInt(localStorage.getItem(LABELS_VERSION_KEY) || '1', 10)
-	} catch {}
-	if (ver === 2) return obj
-	const migrated = {}
-	for (const [k, v] of Object.entries(obj)) {
-		const logical = physicalIdToLogicalId(k)
-		if (!CENTER_IDS.has(logical)) migrated[logical] = v
-	}
-	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated))
-		localStorage.setItem(LABELS_VERSION_KEY, '2')
-	} catch {}
-	return migrated
-}
+// (legacy global label loading removed; profiles manage persistence)
 // Persist labels to active profile (legacy alias)
 function saveLabels(obj) {
     try {
@@ -1451,10 +1465,17 @@ function bootstrap() {
   migrateIfNeeded()
   // 3) Render home view list
   try { renderProfilesList() } catch {}
-  // 4) Route to active profile or home
+  // 4) Route to last view (home/cube) and active profile
   try {
-    if (getActiveProfile()) openActiveProfile()
-    else showHome()
+    let lastView = null
+    try { lastView = sessionStorage.getItem(LAST_VIEW_KEY) } catch {}
+    if (lastView === 'home') {
+      showHome()
+    } else if (lastView === 'cube' && getActiveProfile()) {
+      openActiveProfile()
+    } else {
+      showHome()
+    }
   } catch {}
   // 5) Attach handlers and init orientation overlay
   try {
@@ -1463,7 +1484,7 @@ function bootstrap() {
   } catch {}
   // Handlers
   const openProfilesBtn = document.getElementById('openProfilesBtn')
-  if (openProfilesBtn) openProfilesBtn.onclick = renderProfilesList
+  if (openProfilesBtn) openProfilesBtn.onclick = () => { renderProfilesList(); showProfiles() }
   const newProfileBtn = document.getElementById('newProfileBtn')
   if (newProfileBtn) newProfileBtn.onclick = () => {
     const raw = prompt('Nazwa profilu:')
@@ -1485,6 +1506,8 @@ function bootstrap() {
   }
   const backToHomeBtn = document.getElementById('backToHome')
   if (backToHomeBtn) backToHomeBtn.onclick = () => { try { stopPieceTrainer() } catch {}; showHome() }
+  const backToHomeFromProfiles = document.getElementById('backToHomeFromProfiles')
+  if (backToHomeFromProfiles) backToHomeFromProfiles.onclick = () => showHome()
 }
 
 bootstrap()
