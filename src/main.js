@@ -40,8 +40,7 @@ try {
   window.showHome = showHome
   window.showCube = showCube
 } catch {}
-// Start at home view
-showHome()
+// (Start routing is handled later in bootstrap)
 
 // ======= Profiles storage API (localStorage) =======
 const PROFILES_KEY = 'RUBIK_PROFILES_V1'
@@ -96,8 +95,7 @@ function migrateIfNeeded() {
   localStorage.removeItem('rubik_orientation_v1')
 }
 
-// Call migration early (before the rest of UI initialization uses old keys)
-migrateIfNeeded()
+// (Migration is run in bootstrap after theme init)
 
 // ======= Home view: profiles list rendering =======
 function openActiveProfile() {
@@ -142,40 +140,7 @@ function renderProfilesList() {
   })
 }
 
-// Hook: open profiles button shows list
-const openProfilesBtn = document.getElementById('openProfilesBtn')
-if (openProfilesBtn) openProfilesBtn.onclick = renderProfilesList
-
-// New Profile flow: ask name, then reuse orientation overlay, create profile
-const newProfileBtn = document.getElementById('newProfileBtn')
-if (newProfileBtn) newProfileBtn.onclick = () => {
-  const raw = prompt('Nazwa profilu:')
-  const name = raw && raw.trim()
-  if (!name) return
-  // Show cube view to ensure overlay is visible (overlay lives inside cubeView)
-  showCube()
-  // Reset and open orientation wizard
-  resetOrientationWizardState()
-  openOrientationOverlay()
-  // On save, create profile with chosen orientation and open it
-  const onSave = () => {
-    const top = selectedTop
-    const front = selectedFront
-    if (top && front) {
-      createProfile({ name, orientation: { top, front } })
-      openActiveProfile()
-    }
-    orientationSaveBtn && orientationSaveBtn.removeEventListener('click', onSave)
-  }
-  if (orientationSaveBtn) orientationSaveBtn.addEventListener('click', onSave, { once: true })
-}
-
-// Back button to return to home view
-const backToHomeBtn = document.getElementById('backToHome')
-if (backToHomeBtn) backToHomeBtn.onclick = () => {
-  try { stopPieceTrainer() } catch {}
-  showHome()
-}
+// (Handlers are attached in bootstrap after initial routing)
 
 // Grupa główna kostki (łatwa rotacja orientacji)
 const cubeGroup = new THREE.Group()
@@ -318,7 +283,6 @@ if (themeToggle)
 	})
 
 // ======= Pierwsze uruchomienie: wybór orientacji (front/top) =======
-const ORIENTATION_KEY = 'rubik_orientation_v1'
 const orientationOverlay = document.getElementById('orientationOverlay')
 const stepTop = document.getElementById('orientationStepTop')
 const stepFront = document.getElementById('orientationStepFront')
@@ -491,20 +455,6 @@ function initOrientation() {
     })
   }
 
-	// first-run: show overlay only if not saved
-	let saved = null
-	try {
-		const raw = localStorage.getItem(ORIENTATION_KEY)
-		saved = raw ? JSON.parse(raw) : null
-	} catch {}
-	if (!saved) {
-		resetOrientationWizardState()
-		openOrientationOverlay()
-	} else {
-		applyOrientationFromSelection(saved)
-		updateOrientationSummaryUI(saved)
-	}
-
 	updateSaveEnabled()
 	refreshDisabledByLogic()
 	refreshAllLabelTexts()
@@ -517,8 +467,6 @@ function initOrientation() {
 		if (labelEl) labelEl.style.display = modeEl && modeEl.value === 'quiz' ? 'inline-flex' : 'none'
 	}
 }
-
-initTheme()
 
 // ======= Model kostki =======
 const CUBE_SIZE = 3
@@ -604,7 +552,7 @@ function saveLabels(obj) {
         if (ap) updateProfile(ap.id, { labels: obj })
     } catch {}
 }
-let labels = loadLabels()
+let labels = {}
 
 // ======= Tworzenie naklejek =======
 const tileGeom = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE)
@@ -1495,14 +1443,51 @@ function tick() {
 updateLabelsVisibility()
 tick()
 
-// Zastosuj orientację (jeśli ustawiona) i ewentualnie pokaż kreator przy pierwszym uruchomieniu
-initOrientation()
+// Bootstrap app startup sequence
+function bootstrap() {
+  // 1) Theme
+  initTheme()
+  // 2) Migration
+  migrateIfNeeded()
+  // 3) Render home view list
+  try { renderProfilesList() } catch {}
+  // 4) Route to active profile or home
+  try {
+    if (getActiveProfile()) openActiveProfile()
+    else showHome()
+  } catch {}
+  // 5) Attach handlers and init orientation overlay
+  try {
+    // Orientation overlay setup (no auto-open)
+    initOrientation()
+  } catch {}
+  // Handlers
+  const openProfilesBtn = document.getElementById('openProfilesBtn')
+  if (openProfilesBtn) openProfilesBtn.onclick = renderProfilesList
+  const newProfileBtn = document.getElementById('newProfileBtn')
+  if (newProfileBtn) newProfileBtn.onclick = () => {
+    const raw = prompt('Nazwa profilu:')
+    const name = raw && raw.trim()
+    if (!name) return
+    // Ensure overlay visible (lives in cubeView)
+    showCube()
+    resetOrientationWizardState()
+    openOrientationOverlay()
+    const onSave = () => {
+      const top = selectedTop
+      const front = selectedFront
+      if (top && front) {
+        createProfile({ name, orientation: { top, front } })
+        openActiveProfile()
+      }
+    }
+    if (orientationSaveBtn) orientationSaveBtn.addEventListener('click', onSave, { once: true })
+  }
+  const backToHomeBtn = document.getElementById('backToHome')
+  if (backToHomeBtn) backToHomeBtn.onclick = () => { try { stopPieceTrainer() } catch {}; showHome() }
+}
 
-// Start routing: if there is an active profile, open it; otherwise show home
-try {
-  if (getActiveProfile()) openActiveProfile()
-  else showHome()
-} catch {}
+bootstrap()
 
 // ================== Mini‑scena: trening pojedynczego elementu (tylko tryb na miejscu) ==================
 // DOM elementy (przyciski uruchamiające trener na miejscu)
