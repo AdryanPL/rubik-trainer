@@ -18,24 +18,48 @@
 	</head>
 	<body>
 		<!-- Widok główny (menu startowe) -->
-		<div id="homeView">
-			<div class="home-hero">
-				<h1 class="home-title">Aplikacja do nauki blindfold 3x3</h1>
-				<div class="home-actions">
-					<button id="newProfileBtn" class="btn btn-lg">Nowa kostka</button>
-					<button id="openProfilesBtn" class="btn btn-lg btn-secondary">Wczytaj kostkę</button>
-				</div>
-			</div>
-		</div>
+        <div id="homeView">
+            <div class="home-stage">
+                <div class="home-frame" aria-hidden="true"></div>
+                <div class="home-deco" aria-hidden="true">
+                    <span class="shape shape-star"></span>
+                    <span class="shape shape-triangle"></span>
+                    <span class="shape shape-ribbon"></span>
+                    <span class="shape shape-donut"></span>
+                    <span class="shape shape-blob"></span>
+                </div>
+                <div class="home-content">
+                    <div class="home-pill">BLINDFOLD 3x3</div>
+                    <h1 class="home-title">Rubik Trainer</h1>
+                    <p class="home-subtitle">Ucz się nazw pól i buforów — Old Pochmann</p>
+                    <div class="home-actions">
+                        <button id="newProfileBtn" class="btn btn-lg btn-accent">Start — nowa kostka</button>
+                        <button id="openProfilesBtn" class="btn btn-lg btn-secondary">Wczytaj kostkę</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-		<!-- Widok listy profili -->
-		<div id="profilesView" class="hidden">
-			<div class="profiles-header">
-				<button id="backToHomeFromProfiles" class="btn btn-icon" aria-label="Powrót">←</button>
-				<h2 class="profiles-title">Twoje kostki</h2>
-			</div>
-			<div id="profilesList"></div>
-		</div>
+        <!-- Widok listy profili (stylistyka jak ekran główny) -->
+        <div id="profilesView" class="hidden">
+            <div class="home-stage">
+                <div class="home-frame" aria-hidden="true"></div>
+                <div class="home-deco" aria-hidden="true">
+                    <span class="shape shape-star"></span>
+                    <span class="shape shape-triangle"></span>
+                    <span class="shape shape-ribbon"></span>
+                    <span class="shape shape-donut"></span>
+                    <span class="shape shape-blob"></span>
+                </div>
+                <button id="backToHomeFromProfiles" class="btn btn-icon back-floating" aria-label="Powrót">←</button>
+                <div class="home-content">
+                    <div class="home-pill">ZAPISANE UKŁADY</div>
+                    <h2 class="home-title">Twoje kostki</h2>
+                    <p class="home-subtitle">Wybierz profil, zmień nazwę lub usuń</p>
+                    <div id="profilesList" class="profiles-list"></div>
+                </div>
+            </div>
+        </div>
 
 		<!-- Widok kostki (scena + UI) -->
 		<div id="cubeView" class="hidden">

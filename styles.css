@@ -53,26 +53,25 @@ body {
 
 /* ===== Home view (hero) ===== */
 #homeView {
-	display: block;
+    display: block;
 }
-.home-hero {
-	min-height: 75vh;
-	display: grid;
-	place-items: center;
-	text-align: center;
-	gap: 18px;
-}
+.home-stage { position: relative; min-height: 100vh; display: grid; place-items: center; overflow: hidden; }
+.home-frame { position: absolute; inset: 6% 6%; border: 10px solid rgba(148, 163, 184, 0.35); border-radius: 8px; }
+.home-deco { position: absolute; inset: 0; pointer-events: none; }
+.home-content { position: relative; z-index: 1; display: grid; place-items: center; gap: 16px; text-align: center; padding: 16px; }
 .home-title {
-	font-size: clamp(22px, 4vw, 34px);
-	font-weight: 700;
-	color: #f3f4f6;
-	margin: 0;
+    font-size: clamp(22px, 4vw, 34px);
+    font-weight: 700;
+    color: #f3f4f6;
+    margin: 0;
 }
+.home-subtitle { font-size: clamp(13px, 2.2vw, 18px); color: #9aa4b2; margin: 0; }
+.home-pill { background: #8da2fb33; color: #a5b4fc; border: 1px solid #8da2fb55; padding: 8px 16px; border-radius: 999px; font-weight: 700; letter-spacing: 0.4px; font-size: 13px; }
 .home-actions {
-	display: flex;
-	gap: 12px;
-	justify-content: center;
-	flex-wrap: wrap;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 .btn {
 	background: #111827;
@@ -85,8 +84,11 @@ body {
 }
 .btn:hover { background: #0f172a; }
 .btn-secondary { background: #0e1726; }
+.btn-accent { background: #f2cc5c; color: #1f2937; border-color: #d1a83c; }
+.btn-accent:hover { background: #e9be3f; }
 .btn-lg { padding: 12px 16px; font-size: 15px; }
 .btn-icon { width: 40px; height: 40px; border-radius: 999px; padding: 0; display: inline-grid; place-items: center; }
+.back-floating { position: absolute; top: 16px; left: 16px; z-index: 2; }
 
 /* Profiles view header */
 .profiles-header {
@@ -96,10 +98,28 @@ body {
 	margin: 10px 0 6px;
 }
 .profiles-title {
-	margin: 0;
-	font-size: 18px;
-	font-weight: 600;
-	color: #e5e7eb;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #e5e7eb;
+}
+.profiles-list { width: min(820px, 92vw); display: grid; gap: 10px; }
+
+/* Decorative shapes */
+.shape { position: absolute; display: block; opacity: 0.95; }
+.shape-star { width: 120px; height: 120px; left: 3%; top: 35%; background: #ec4899; clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); filter: drop-shadow(0 6px 18px rgba(236,72,153,0.3)); }
+.shape-triangle { width: 0; height: 0; border-left: 160px solid transparent; border-right: 0 solid transparent; border-bottom: 160px solid #34d399; left: 10%; bottom: -20px; transform: rotate(-10deg); filter: drop-shadow(0 8px 24px rgba(52,211,153,0.25)); }
+.shape-ribbon { width: 150px; height: 110px; right: 6%; bottom: -10px; background: #f59e0b; clip-path: polygon(0 0, 70% 0, 100% 30%, 70% 60%, 100% 100%, 30% 70%, 0 70%); transform: rotate(8deg); filter: drop-shadow(0 8px 24px rgba(245,158,11,0.25)); }
+.shape-donut { width: 220px; height: 220px; border-radius: 999px; border: 36px solid #93c5fd; left: 50%; top: -80px; transform: translateX(-50%); box-sizing: border-box; opacity: 0.9; filter: drop-shadow(0 12px 36px rgba(147,197,253,0.25)); }
+.shape-blob { width: 220px; height: 220px; right: -30px; top: -10px; background: #fb7185; border-radius: 46% 54% 64% 36%/48% 52% 48% 52%; filter: drop-shadow(0 12px 36px rgba(251,113,133,0.25)); }
+
+@media (max-width: 640px) {
+  .home-frame { inset: 8% 4%; border-width: 8px; }
+  .shape-star { width: 60px; height: 60px; left: 6%; top: 36%; }
+  .shape-triangle { border-bottom-width: 120px; left: 6%; }
+  .shape-ribbon { width: 120px; height: 90px; right: -10px; }
+  .shape-donut { width: 180px; height: 180px; border-width: 28px; top: -60px; }
+  .shape-blob { width: 180px; height: 180px; right: -20px; }
 }
 
 /* Hamburger button (mobile) */
